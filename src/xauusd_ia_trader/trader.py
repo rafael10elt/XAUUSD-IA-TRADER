@@ -132,6 +132,11 @@ class XAUUSDAutonomousTrader:
         equity = float(account.get("equity") or account.get("balance") or 0.0)
         spread_points = self.broker.current_spread_points(self.symbol)
 
+        if self.paper_mode:
+            self.risk.state.open_positions = len(self.engine.state_store.active_items(self.symbol))
+        else:
+            self.risk.state.open_positions = len(self.broker.positions_get(symbol=self.symbol, magic=int(self.config["broker"].get("magic", 2401001))))
+
         frames = {}
         for tf in self.config["app"].get("timeframes", ["M1", "M5", "M15"]):
             frames[tf] = self.broker.get_rates(self.symbol, tf, 300)

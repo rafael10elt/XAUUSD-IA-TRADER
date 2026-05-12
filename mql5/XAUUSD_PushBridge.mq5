@@ -19,7 +19,7 @@ void OnDeinit(const int reason)
 
 void OnTimer()
 {
-   int handle = FileOpen(QueueFileName, FILE_READ | FILE_TXT | FILE_COMMON | FILE_SHARE_READ);
+   int handle = FileOpen(QueueFileName, FILE_READ | FILE_TXT | FILE_COMMON | FILE_SHARE_READ | FILE_ANSI);
    if(handle == INVALID_HANDLE)
       return;
 

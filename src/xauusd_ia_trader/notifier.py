@@ -72,7 +72,7 @@ class MT5QueueSink:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def emit(self, event: NotificationEvent) -> None:
-        with self.path.open("a", encoding="utf-8", newline="\n") as handle:
+        with self.path.open("a", encoding="cp1252", errors="replace", newline="\n") as handle:
             handle.write(event.to_line() + "\n")
 
 
