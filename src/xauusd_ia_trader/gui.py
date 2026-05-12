@@ -370,8 +370,7 @@ class XAUUSDControlPanel:
 
         for idx, (label, var) in enumerate(rows):
             row = ttk.Frame(left, style="Card.TFrame")
-            row.grid(row=idx, column=0, sticky="ew", pady=5)
-            left.columnconfigure(0, weight=1)
+            row.pack(fill="x", pady=5)
             ttk.Label(row, text=label, style="MetricTitle.TLabel", width=18).pack(side="left")
             if label == "Lado":
                 widget = ttk.Combobox(row, textvariable=var, values=["buy", "sell"], state="readonly", style="Dark.TCombobox")
@@ -522,7 +521,10 @@ class XAUUSDControlPanel:
         input_row.pack(fill="x", pady=(10, 0))
         entry = ttk.Entry(input_row, textvariable=self.chat_question_var, style="Dark.TEntry")
         entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        entry.bind("<Return>", lambda _event: self._send_chat_question())
+        entry.bind("<KP_Enter>", lambda _event: self._send_chat_question())
         ttk.Button(input_row, text="Enviar", command=self._send_chat_question, style="Accent.TButton").pack(side="left")
+        self.chat_input = entry
 
         for label, question in [
             ("Resumo do robô", "Explique o estado atual do robô e os principais riscos."),
@@ -1030,6 +1032,10 @@ class XAUUSDControlPanel:
         self._append_chat("user", question)
         self.chat_status_var.set("Consultando IA...")
         threading.Thread(target=self._send_chat_worker, args=(question,), daemon=True).start()
+        try:
+            self.chat_input.focus_set()
+        except Exception:
+            pass
 
     def _send_chat_worker(self, question: str) -> None:
         try:

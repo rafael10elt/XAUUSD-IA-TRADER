@@ -29,8 +29,8 @@ risk:
   trailing_atr_mult: 1.2
   trailing_step_points: 10.0
   min_rr: 1.2
-  session_start: 07:00
-  session_end: '20:30'
+  session_start: 00:00
+  session_end: '23:30'
 strategy:
   atr_period: 14
   ema_fast: 20
@@ -42,7 +42,7 @@ strategy:
   confirmation_bars: 2
   max_hold_bars: 20
 ai:
-  enabled: false
+  enabled: true
   hf_model: llama-3.3-70b-versatile
   timeout_seconds: 12
 notifications:

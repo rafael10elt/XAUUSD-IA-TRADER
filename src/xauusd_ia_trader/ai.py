@@ -92,6 +92,15 @@ class HuggingFaceAdvisor:
 
         try:
             resp = requests.post(url, headers=headers, json=payload, timeout=self.timeout_seconds)
+            if resp.status_code == 404:
+                return {
+                    "answer": (
+                        "O modelo configurado não foi encontrado no Hugging Face Inference API. "
+                        "Ajuste HF_MODEL para um modelo suportado, por exemplo um modelo de texto-instruct público, "
+                        "ou use um Inference Endpoint dedicado."
+                    ),
+                    "raw": {"status_code": 404, "url": url},
+                }
             resp.raise_for_status()
             data = resp.json()
             answer = ""
