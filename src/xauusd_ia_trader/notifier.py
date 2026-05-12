@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Callable, Protocol
 
 
 def resolve_common_files_dir() -> Path:
@@ -60,6 +60,14 @@ class NotificationSink(Protocol):
 class ConsoleSink:
     def emit(self, event: NotificationEvent) -> None:
         print(f"[{event.kind.upper()}] {event.title} | {event.message}")
+
+
+class CallbackSink:
+    def __init__(self, callback: Callable[[NotificationEvent], None]):
+        self.callback = callback
+
+    def emit(self, event: NotificationEvent) -> None:
+        self.callback(event)
 
 
 class MT5QueueSink:

@@ -39,12 +39,25 @@ copy .env.example .env
 python -m xauusd_ia_trader.cli --config configs/default.yaml --once
 ```
 
+To open the interactive dashboard:
+
+```powershell
+python -m xauusd_ia_trader.cli --config configs/default.yaml --gui
+```
+
+To force a demo test trade from the terminal:
+
+```powershell
+python -m xauusd_ia_trader.cli --config configs/default.yaml --once --force-side buy
+```
+
 To run in live mode later:
 
 1. Fill `MT5_TERMINAL_PATH`, `MT5_LOGIN`, `MT5_PASSWORD` and `MT5_SERVER` in `.env`.
 2. Set `XAUUSD_MODE=live`.
 3. Keep `MT5_COMMON_FILES_DIR` pointed to the MT5 common files directory if the automatic detection is not correct.
 4. Start with demo first and confirm the bridge EA is receiving push messages.
+5. Use the GUI to watch status, logs, positions and manual test trades.
 
 ## MT5 push notifications
 

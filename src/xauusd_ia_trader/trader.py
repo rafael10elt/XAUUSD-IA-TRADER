@@ -204,7 +204,7 @@ class XAUUSDAutonomousTrader:
 
         self.notifier.info(
             "Regime detected",
-            f"{snapshot.symbol} | {snapshot.regime} | spread={snapshot.spread_points:.1f}",
+            f"{snapshot.symbol} | {snapshot.regime} | spread={snapshot.spread_points:.1f} | exec={symbol_info.get('trade_exemode', '-')}",
             symbol=self.symbol,
             priority=2,
         )

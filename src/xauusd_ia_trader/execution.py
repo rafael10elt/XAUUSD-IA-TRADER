@@ -161,7 +161,7 @@ class ExecutionEngine:
             self.state_store.upsert(lifecycle)
         self.notifier.info(
             "Order sent" if ok else "Order rejected",
-            f"{idea.symbol} | retcode={result.get('retcode')} | message={result.get('comment') or result.get('message') or ''}",
+            f"{idea.symbol} | retcode={result.get('retcode')} | message={result.get('comment') or result.get('message') or ''} | attempts={result.get('attempts')}",
             symbol=idea.symbol,
             priority=1 if ok else 0,
         )
