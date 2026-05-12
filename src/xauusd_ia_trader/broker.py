@@ -20,6 +20,19 @@ TIMEFRAME_MAP = {
 }
 
 
+def _pick_filling_mode(info: dict[str, Any]) -> int | None:
+    if mt5 is None:
+        return None
+    mode = int(info.get("filling_mode") or 0)
+    if mode == getattr(mt5, "SYMBOL_FILLING_FOK", -1):
+        return getattr(mt5, "ORDER_FILLING_FOK", None)
+    if mode == getattr(mt5, "SYMBOL_FILLING_IOC", -1):
+        return getattr(mt5, "ORDER_FILLING_IOC", None)
+    if mode == getattr(mt5, "SYMBOL_FILLING_RETURN", -1):
+        return getattr(mt5, "ORDER_FILLING_RETURN", None)
+    return getattr(mt5, "ORDER_FILLING_RETURN", None)
+
+
 @dataclass
 class MT5Broker:
     config: dict[str, Any]
@@ -124,6 +137,21 @@ class MT5Broker:
         point = float(getattr(info, "point", 0.01) or 0.01)
         return abs(float(tick.ask) - float(tick.bid)) / point
 
+    def _normalize_price(self, symbol: str, value: float) -> float:
+        info = self.symbol_info(symbol)
+        digits = int(info.get("digits") or 2)
+        return round(float(value), digits)
+
+    def _prepare_trade_request(self, symbol: str, request: dict[str, Any]) -> dict[str, Any]:
+        info = self.symbol_info(symbol)
+        filling_mode = _pick_filling_mode(info)
+        if filling_mode is not None:
+            request["type_filling"] = filling_mode
+        check = mt5.order_check(request) if mt5 is not None else None
+        if check is not None:
+            request["check"] = check._asdict()
+        return request
+
     def send_market_order(
         self,
         *,
@@ -146,26 +174,32 @@ class MT5Broker:
             return {"success": False, "message": "no tick data"}
 
         order_type = mt5.ORDER_TYPE_BUY if side.lower() == "buy" else mt5.ORDER_TYPE_SELL
-        price = float(tick.ask if side.lower() == "buy" else tick.bid)
+        price = self._normalize_price(symbol, float(tick.ask if side.lower() == "buy" else tick.bid))
+        sl = self._normalize_price(symbol, sl)
+        tp = self._normalize_price(symbol, tp)
         request = {
             "action": mt5.TRADE_ACTION_DEAL,
             "symbol": symbol,
             "volume": float(lots),
             "type": order_type,
             "price": price,
-            "sl": float(sl),
-            "tp": float(tp),
+            "sl": sl,
+            "tp": tp,
             "deviation": int(deviation),
             "magic": int(magic),
             "comment": comment[:31],
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_FOK,
         }
+        request = self._prepare_trade_request(symbol, request)
         result = mt5.order_send(request)
         if result is None:
             return {"success": False, "message": str(mt5.last_error()), "request": request}
         payload = result._asdict()
-        payload["success"] = payload.get("retcode") == mt5.TRADE_RETCODE_DONE
+        payload["success"] = payload.get("retcode") in {
+            mt5.TRADE_RETCODE_DONE,
+            getattr(mt5, "TRADE_RETCODE_DONE_PARTIAL", -1),
+            getattr(mt5, "TRADE_RETCODE_PLACED", -1),
+        }
         payload["request"] = request
         return payload
 
@@ -181,13 +215,16 @@ class MT5Broker:
             return {"success": False, "message": "MetaTrader5 not installed"}
         if not self.ensure_symbol(symbol):
             return {"success": False, "message": "symbol not available"}
+        sl = self._normalize_price(symbol, sl)
+        tp = self._normalize_price(symbol, tp)
         request = {
             "action": mt5.TRADE_ACTION_SLTP,
             "position": int(ticket),
             "symbol": symbol,
-            "sl": float(sl),
-            "tp": float(tp),
+            "sl": sl,
+            "tp": tp,
         }
+        request = self._prepare_trade_request(symbol, request)
         result = mt5.order_send(request)
         if result is None:
             return {"success": False, "message": str(mt5.last_error()), "request": request}
@@ -215,7 +252,7 @@ class MT5Broker:
             return {"success": False, "message": "no tick data"}
         side = side.lower()
         order_type = mt5.ORDER_TYPE_SELL if side == "buy" else mt5.ORDER_TYPE_BUY
-        price = float(tick.bid if side == "buy" else tick.ask)
+        price = self._normalize_price(symbol, float(tick.bid if side == "buy" else tick.ask))
         request = {
             "action": mt5.TRADE_ACTION_DEAL,
             "position": int(ticket),
@@ -227,13 +264,16 @@ class MT5Broker:
             "magic": int(magic),
             "comment": "position close",
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_FOK,
         }
+        request = self._prepare_trade_request(symbol, request)
         result = mt5.order_send(request)
         if result is None:
             return {"success": False, "message": str(mt5.last_error()), "request": request}
         payload = result._asdict()
-        payload["success"] = payload.get("retcode") == mt5.TRADE_RETCODE_DONE
+        payload["success"] = payload.get("retcode") in {
+            mt5.TRADE_RETCODE_DONE,
+            getattr(mt5, "TRADE_RETCODE_DONE_PARTIAL", -1),
+        }
         payload["request"] = request
         return payload
 
@@ -260,24 +300,30 @@ class MT5Broker:
             order_type = mt5.ORDER_TYPE_BUY_STOP
         else:
             order_type = mt5.ORDER_TYPE_SELL_STOP
+        entry = self._normalize_price(symbol, entry)
+        sl = self._normalize_price(symbol, sl)
+        tp = self._normalize_price(symbol, tp)
         request = {
             "action": mt5.TRADE_ACTION_PENDING,
             "symbol": symbol,
             "volume": float(lots),
             "type": order_type,
-            "price": float(entry),
-            "sl": float(sl),
-            "tp": float(tp),
+            "price": entry,
+            "sl": sl,
+            "tp": tp,
             "deviation": int(deviation),
             "magic": int(magic),
             "comment": comment[:31],
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_FOK,
         }
+        request = self._prepare_trade_request(symbol, request)
         result = mt5.order_send(request)
         if result is None:
             return {"success": False, "message": str(mt5.last_error()), "request": request}
         payload = result._asdict()
-        payload["success"] = payload.get("retcode") == mt5.TRADE_RETCODE_DONE
+        payload["success"] = payload.get("retcode") in {
+            mt5.TRADE_RETCODE_DONE,
+            getattr(mt5, "TRADE_RETCODE_PLACED", -1),
+        }
         payload["request"] = request
         return payload

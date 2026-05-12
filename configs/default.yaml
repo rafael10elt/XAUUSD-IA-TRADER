@@ -1,7 +1,7 @@
 app:
   symbol: XAUUSD
   timeframes: ["M1", "M5", "M15"]
-  mode: paper
+  mode: live
   cycle_seconds: 30
   position_state_path: "runtime/position_state.json"
 
