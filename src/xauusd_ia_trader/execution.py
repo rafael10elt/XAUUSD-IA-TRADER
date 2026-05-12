@@ -193,6 +193,93 @@ class ExecutionEngine:
                 positions.append(view)
         return positions
 
+    def list_positions(self, symbol: str | None = None) -> list[PositionView]:
+        if symbol:
+            return self._query_positions(symbol)
+        if self.paper_mode:
+            return [
+                PositionView(
+                    ticket=item.ticket,
+                    symbol=item.symbol,
+                    side=item.side,
+                    volume=item.remaining_volume,
+                    price_open=item.price_open,
+                    stop_loss=item.stop_loss,
+                    take_profit=item.take_profit,
+                    current_price=item.price_open,
+                    profit=0.0,
+                    magic=self.magic,
+                    comment=item.reason,
+                )
+                for item in self.state_store.active_items()
+            ]
+        payloads = self.broker.positions_get(magic=self.magic)
+        positions: list[PositionView] = []
+        for payload in payloads:
+            view = self._position_from_payload(payload)
+            if view is not None and (symbol is None or view.symbol == symbol):
+                positions.append(view)
+        return positions
+
+    def close_single_position(
+        self,
+        *,
+        ticket: int,
+        symbol: str,
+        side: str,
+        volume: float,
+    ) -> dict[str, Any]:
+        if self.paper_mode:
+            item = self.state_store.get(ticket)
+            if item is None:
+                return {"success": False, "message": "paper position not found"}
+            remaining = max(0.0, float(item.remaining_volume) - float(volume))
+            if remaining <= 0:
+                self.state_store.remove(ticket)
+            else:
+                self.state_store.mark_action(ticket, remaining_volume=remaining)
+            self.notifier.info("Position closed", f"{symbol} | ticket={ticket} | volume={volume:.2f}", symbol=symbol, priority=1)
+            return {"success": True, "message": "paper position updated", "remaining_volume": remaining}
+        return self.broker.close_position(
+            ticket=ticket,
+            symbol=symbol,
+            side=side,
+            volume=volume,
+            magic=self.magic,
+            deviation=self.deviation,
+        )
+
+    def close_all_positions(self, symbol: str | None = None) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        positions = self.list_positions(symbol)
+        for position in positions:
+            result = self.close_single_position(
+                ticket=position.ticket,
+                symbol=position.symbol,
+                side=position.side,
+                volume=position.volume,
+            )
+            results.append({"ticket": position.ticket, **result})
+        return results
+
+    def partial_close_position(
+        self,
+        *,
+        ticket: int,
+        symbol: str,
+        side: str,
+        volume: float,
+        ratio: float = 0.5,
+    ) -> dict[str, Any]:
+        symbol_info = self.broker.symbol_info(symbol)
+        volume_step = float(symbol_info.get("volume_step") or 0.01)
+        volume_min = float(symbol_info.get("volume_min") or 0.01)
+        close_volume = max(volume_min, round(float(volume) * float(ratio) / volume_step) * volume_step)
+        close_volume = min(close_volume, float(volume))
+        if close_volume <= 0:
+            return {"success": False, "message": "close volume too small"}
+        return self.close_single_position(ticket=ticket, symbol=symbol, side=side, volume=close_volume)
+
     def manage_positions(
         self,
         *,
