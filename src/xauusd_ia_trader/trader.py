@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
@@ -14,6 +14,7 @@ from .models import MarketSnapshot, TradeIdea
 from .notifier import ConsoleSink, MT5QueueSink, NotificationBus
 from .regime import classify_regime
 from .risk import RiskManager
+from .state_store import PositionStateStore
 
 
 @dataclass
@@ -39,6 +40,7 @@ class XAUUSDAutonomousTrader:
             risk=self.risk,
             notifier=self.notifier,
             magic=int(self.config["broker"].get("magic", 2401001)),
+            state_store=PositionStateStore(self.config["app"].get("position_state_path", "runtime/position_state.json")),
             deviation=int(self.config["broker"].get("deviation", 20)),
             paper_mode=self.paper_mode,
         )
@@ -152,7 +154,7 @@ class XAUUSDAutonomousTrader:
         snapshot = MarketSnapshot(
             symbol=self.symbol,
             timeframe="M5",
-            as_of=datetime.utcnow(),
+            as_of=datetime.now(UTC),
             regime=regime.regime,
             spread_points=spread_points,
             features={"regime_reason": regime.reason, **ai_hint},
@@ -165,10 +167,26 @@ class XAUUSDAutonomousTrader:
             priority=2,
         )
 
+        live_price = float(df.iloc[-1]["close"])
+        live_atr = float(df.iloc[-1].get("atr_14", 0.0) or 0.0)
+        lifecycle_actions = self.engine.manage_positions(
+            symbol=self.symbol,
+            current_price=live_price,
+            atr=live_atr,
+            spread_points=spread_points,
+        )
+        if lifecycle_actions:
+            self.notifier.info(
+                "Position management",
+                f"{self.symbol} | actions={len(lifecycle_actions)}",
+                symbol=self.symbol,
+                priority=1,
+            )
+
         idea = self._pick_idea(df, regime.regime, ai_hint)
         if idea is None:
             self.notifier.info("No trade", f"{self.symbol} | {regime.reason}", symbol=self.symbol, priority=2)
-            return {"success": True, "action": "flat", "regime": regime.regime, "reason": regime.reason}
+            return {"success": True, "action": "flat", "regime": regime.regime, "reason": regime.reason, "management": lifecycle_actions}
 
         decision, order = self.engine.place_trade(idea, equity=equity, spread_points=spread_points)
         if decision.approved and order and order.success:
@@ -180,10 +198,12 @@ class XAUUSDAutonomousTrader:
                 "decision": decision.reason,
                 "order": order.raw,
                 "paper_mode": self.paper_mode,
+                "management": lifecycle_actions,
             }
 
         return {
             "success": False,
             "regime": regime.regime,
             "decision": decision.reason,
+            "management": lifecycle_actions,
         }

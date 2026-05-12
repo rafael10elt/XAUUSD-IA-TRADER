@@ -20,6 +20,7 @@ def test_risk_locks_after_consecutive_losses():
         "session_start": "00:00",
         "session_end": "23:59",
     })
+    risk.state.day_key = risk._today_key()
     risk.state.consecutive_losses = 2
     idea = TradeIdea("XAUUSD", "buy", "market", 2300.0, 2298.0, 2304.0, 0.0, 0.8, "trend_up", "test")
     decision = risk.validate(

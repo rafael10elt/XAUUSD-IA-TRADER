@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
@@ -29,7 +29,7 @@ class NotificationEvent:
 
     def to_json(self) -> str:
         if not self.created_at:
-            self.created_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+            self.created_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
         return json.dumps(
             {
                 "title": self.title,
@@ -44,7 +44,7 @@ class NotificationEvent:
 
     def to_line(self) -> str:
         if not self.created_at:
-            self.created_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+            self.created_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
         return (
             f"[{self.created_at}] "
             f"P{self.priority} "

@@ -3,6 +3,7 @@ app:
   timeframes: ["M1", "M5", "M15"]
   mode: paper
   cycle_seconds: 30
+  position_state_path: "runtime/position_state.json"
 
 broker:
   terminal_path: ""
@@ -22,6 +23,10 @@ risk:
   breakeven_trigger_r: 0.9
   partial_take_profit_r: 1.0
   final_take_profit_r: 2.0
+  partial_close_ratio: 0.5
+  trailing_start_r: 1.2
+  trailing_atr_mult: 1.2
+  trailing_step_points: 10.0
   min_rr: 1.2
   session_start: "07:00"
   session_end: "20:30"
@@ -46,4 +51,3 @@ notifications:
   enabled: true
   queue_file: "xauusd_push_queue.txt"
   min_priority: 1
-

@@ -49,3 +49,36 @@ class OrderResult:
     ticket: Optional[int] = None
     raw: dict[str, Any] = field(default_factory=dict)
 
+
+@dataclass(slots=True)
+class PositionView:
+    ticket: int
+    symbol: str
+    side: str
+    volume: float
+    price_open: float
+    stop_loss: float
+    take_profit: float
+    current_price: float
+    profit: float
+    magic: int = 0
+    comment: str = ""
+
+
+@dataclass(slots=True)
+class PositionLifecycle:
+    ticket: int
+    symbol: str
+    side: str
+    initial_volume: float
+    remaining_volume: float
+    price_open: float
+    stop_loss: float
+    take_profit: float
+    partial_done: bool = False
+    breakeven_done: bool = False
+    trailing_done: bool = False
+    created_at: str = ""
+    updated_at: str = ""
+    regime: str = ""
+    reason: str = ""

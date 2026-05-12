@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, time
+from datetime import UTC, datetime, time
 from typing import Any
 
 from .models import RiskDecision, TradeIdea
@@ -26,7 +26,7 @@ class RiskManager:
     state: RiskState = field(default_factory=RiskState)
 
     def _today_key(self) -> str:
-        return datetime.utcnow().strftime("%Y-%m-%d")
+        return datetime.now(UTC).strftime("%Y-%m-%d")
 
     def reset_if_new_day(self) -> None:
         today = self._today_key()
@@ -39,7 +39,7 @@ class RiskManager:
             self.state.last_lock_reason = ""
 
     def session_allowed(self, now: datetime | None = None) -> bool:
-        now = now or datetime.utcnow()
+        now = now or datetime.now(UTC)
         start = self.config.get("session_start", "07:00")
         end = self.config.get("session_end", "20:30")
         start_h, start_m = [int(x) for x in start.split(":")]

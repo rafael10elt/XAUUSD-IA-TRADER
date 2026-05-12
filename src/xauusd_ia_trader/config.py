@@ -13,6 +13,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "timeframes": ["M1", "M5", "M15"],
         "mode": "paper",
         "cycle_seconds": 30,
+        "position_state_path": "runtime/position_state.json",
     },
     "broker": {
         "terminal_path": "",
@@ -32,6 +33,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "breakeven_trigger_r": 0.9,
         "partial_take_profit_r": 1.0,
         "final_take_profit_r": 2.0,
+        "partial_close_ratio": 0.5,
+        "trailing_start_r": 1.2,
+        "trailing_atr_mult": 1.2,
+        "trailing_step_points": 10.0,
         "min_rr": 1.2,
         "session_start": "07:00",
         "session_end": "20:30",
@@ -87,9 +92,39 @@ def load_yaml_file(path: str | Path | None) -> dict[str, Any]:
 
 def load_config(path: str | Path | None = None) -> dict[str, Any]:
     config = deep_merge(DEFAULT_CONFIG, load_yaml_file(path))
+
+    env_overrides = {
+        "app": {
+            "symbol": os.getenv("XAUUSD_SYMBOL", "").strip() or None,
+            "mode": os.getenv("XAUUSD_MODE", "").strip() or None,
+            "position_state_path": os.getenv("XAUUSD_POSITION_STATE_PATH", "").strip() or None,
+        },
+        "broker": {
+            "terminal_path": os.getenv("MT5_TERMINAL_PATH", "").strip() or None,
+            "login": os.getenv("MT5_LOGIN", "").strip() or None,
+            "password": os.getenv("MT5_PASSWORD", "").strip() or None,
+            "server": os.getenv("MT5_SERVER", "").strip() or None,
+            "deviation": os.getenv("MT5_DEVIATION", "").strip() or None,
+            "magic": os.getenv("MT5_MAGIC", "").strip() or None,
+        },
+        "notifications": {
+            "queue_file": os.getenv("MT5_QUEUE_FILE", "").strip() or None,
+        },
+    }
+    for section, values in env_overrides.items():
+        for key, value in values.items():
+            if value is None:
+                continue
+            if key in {"login", "deviation", "magic"}:
+                try:
+                    config[section][key] = int(value)
+                except ValueError:
+                    pass
+            else:
+                config[section][key] = value
+
     config["ai"]["enabled"] = bool(
         config.get("ai", {}).get("enabled", False)
         and os.getenv("HF_API_KEY", "").strip()
     )
     return config
-

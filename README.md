@@ -38,6 +38,13 @@ copy .env.example .env
 python -m xauusd_ia_trader.cli --config configs/default.yaml --once
 ```
 
+To run in live mode later:
+
+1. Fill `MT5_TERMINAL_PATH`, `MT5_LOGIN`, `MT5_PASSWORD` and `MT5_SERVER` in `.env`.
+2. Set `XAUUSD_MODE=live`.
+3. Keep `MT5_COMMON_FILES_DIR` pointed to the MT5 common files directory if the automatic detection is not correct.
+4. Start with demo first and confirm the bridge EA is receiving push messages.
+
 ## MT5 push notifications
 
 MetaTrader 5 push alerts should be sent by an EA running inside the terminal.
@@ -49,6 +56,7 @@ Before using it:
 2. Set your MetaQuotes ID in MT5 options.
 3. Place the EA in the terminal and attach it to an XAUUSD chart.
 4. Configure the Python side to write to the same common files queue.
+5. Compile and attach `mql5/XAUUSD_PushBridge.mq5` to the same terminal.
 
 ## Implementation order
 
@@ -57,4 +65,3 @@ Before using it:
 3. Forward test on demo.
 4. Tune the regime logic.
 5. Only then consider live deployment.
-
