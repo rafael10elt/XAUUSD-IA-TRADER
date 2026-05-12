@@ -1,0 +1,95 @@
+from __future__ import annotations
+
+import copy
+import os
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+DEFAULT_CONFIG: dict[str, Any] = {
+    "app": {
+        "symbol": "XAUUSD",
+        "timeframes": ["M1", "M5", "M15"],
+        "mode": "paper",
+        "cycle_seconds": 30,
+    },
+    "broker": {
+        "terminal_path": "",
+        "login": 0,
+        "password": "",
+        "server": "",
+        "deviation": 20,
+        "magic": 2401001,
+    },
+    "risk": {
+        "risk_per_trade": 0.005,
+        "daily_loss_limit": 0.02,
+        "max_consecutive_losses": 3,
+        "max_trades_per_day": 5,
+        "max_open_positions": 1,
+        "max_spread_points": 80,
+        "breakeven_trigger_r": 0.9,
+        "partial_take_profit_r": 1.0,
+        "final_take_profit_r": 2.0,
+        "min_rr": 1.2,
+        "session_start": "07:00",
+        "session_end": "20:30",
+    },
+    "strategy": {
+        "atr_period": 14,
+        "ema_fast": 20,
+        "ema_slow": 50,
+        "rsi_period": 14,
+        "adx_period": 14,
+        "breakout_lookback": 20,
+        "range_lookback": 30,
+        "confirmation_bars": 2,
+        "max_hold_bars": 20,
+    },
+    "ai": {
+        "enabled": False,
+        "hf_model": "",
+        "timeout_seconds": 12,
+    },
+    "notifications": {
+        "enabled": True,
+        "queue_file": "xauusd_push_queue.txt",
+        "min_priority": 1,
+    },
+}
+
+
+def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    result = copy.deepcopy(base)
+    for key, value in override.items():
+        if (
+            key in result
+            and isinstance(result[key], dict)
+            and isinstance(value, dict)
+        ):
+            result[key] = deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+def load_yaml_file(path: str | Path | None) -> dict[str, Any]:
+    if not path:
+        return {}
+    file_path = Path(path)
+    if not file_path.exists():
+        return {}
+    with file_path.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or {}
+    return data if isinstance(data, dict) else {}
+
+
+def load_config(path: str | Path | None = None) -> dict[str, Any]:
+    config = deep_merge(DEFAULT_CONFIG, load_yaml_file(path))
+    config["ai"]["enabled"] = bool(
+        config.get("ai", {}).get("enabled", False)
+        and os.getenv("HF_API_KEY", "").strip()
+    )
+    return config
+
