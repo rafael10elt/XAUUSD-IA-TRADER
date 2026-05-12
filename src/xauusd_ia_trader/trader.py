@@ -45,7 +45,7 @@ class XAUUSDAutonomousTrader:
             paper_mode=self.paper_mode,
         )
 
-    def _pick_idea(self, df: pd.DataFrame, regime: str, ai_hint: dict[str, Any]) -> TradeIdea | None:
+    def _pick_idea(self, df: pd.DataFrame, regime: str, ai_hint: dict[str, Any], symbol_info: dict[str, Any]) -> TradeIdea | None:
         latest = df.iloc[-1]
         price = float(latest["close"])
         atr = float(latest.get("atr_14", 0.0) or 0.0)
@@ -56,43 +56,54 @@ class XAUUSDAutonomousTrader:
         high_20 = float(latest.get("rolling_high_20", price) or price)
         low_20 = float(latest.get("rolling_low_20", price) or price)
         spread_points = float(latest.get("spread_points", 0.0) or 0.0)
+        point = float(symbol_info.get("point") or 0.01)
+        min_stop_points = float(symbol_info.get("trade_stops_level") or 0.0)
 
-        buffer = max(atr * 0.15, price * 0.0001)
+        buffer = max(atr * 0.15, price * 0.0001, point * 10)
+        min_stop_distance = max(atr * 0.7, buffer * 2, min_stop_points * point, spread_points * point * 2)
 
         if regime == "trend_up":
             side = "buy"
-            entry_mode = "market" if adx >= 25 else "pending"
-            entry = price if entry_mode == "market" else high_20 + buffer
-            stop = min(low_20, ema_fast) - max(atr * 0.4, buffer * 2)
-            risk = max(entry - stop, atr * 0.6)
+            entry_mode = "market"
+            entry = price
+            stop = min(low_20, ema_fast, entry - min_stop_distance)
+            if stop >= entry:
+                stop = entry - min_stop_distance
+            risk = max(entry - stop, min_stop_distance)
             tp = entry + risk * float(self.config["risk"].get("final_take_profit_r", 2.0))
             confidence = min(0.95, 0.65 + (adx / 100.0) + max((ema_fast - ema_slow) / max(price, 1.0), 0))
             reason = "trend continuation scalp"
         elif regime == "trend_down":
             side = "sell"
-            entry_mode = "market" if adx >= 25 else "pending"
-            entry = price if entry_mode == "market" else low_20 - buffer
-            stop = max(high_20, ema_fast) + max(atr * 0.4, buffer * 2)
-            risk = max(stop - entry, atr * 0.6)
+            entry_mode = "market"
+            entry = price
+            stop = max(high_20, ema_fast, entry + min_stop_distance)
+            if stop <= entry:
+                stop = entry + min_stop_distance
+            risk = max(stop - entry, min_stop_distance)
             tp = entry - risk * float(self.config["risk"].get("final_take_profit_r", 2.0))
             confidence = min(0.95, 0.65 + (adx / 100.0) + max((ema_slow - ema_fast) / max(price, 1.0), 0))
             reason = "trend continuation scalp"
         elif regime in {"range", "compression"}:
             if price <= low_20 + atr * 0.35 and rsi <= 45:
                 side = "buy"
-                entry_mode = "pending"
-                entry = low_20 + buffer
-                stop = low_20 - max(atr * 0.45, buffer * 2)
-                risk = max(entry - stop, atr * 0.5)
+                entry_mode = "market"
+                entry = price
+                stop = min(low_20, entry - min_stop_distance)
+                if stop >= entry:
+                    stop = entry - min_stop_distance
+                risk = max(entry - stop, min_stop_distance)
                 tp = entry + risk * 1.4
                 confidence = 0.66
                 reason = "range fade long"
             elif price >= high_20 - atr * 0.35 and rsi >= 55:
                 side = "sell"
-                entry_mode = "pending"
-                entry = high_20 - buffer
-                stop = high_20 + max(atr * 0.45, buffer * 2)
-                risk = max(stop - entry, atr * 0.5)
+                entry_mode = "market"
+                entry = price
+                stop = max(high_20, entry + min_stop_distance)
+                if stop <= entry:
+                    stop = entry + min_stop_distance
+                risk = max(stop - entry, min_stop_distance)
                 tp = entry - risk * 1.4
                 confidence = 0.66
                 reason = "range fade short"
@@ -188,7 +199,7 @@ class XAUUSDAutonomousTrader:
                 priority=1,
             )
 
-        idea = self._pick_idea(df, regime.regime, ai_hint)
+        idea = self._pick_idea(df, regime.regime, ai_hint, symbol_info)
         if idea is None:
             self.notifier.info("No trade", f"{self.symbol} | {regime.reason}", symbol=self.symbol, priority=2)
             return {"success": True, "action": "flat", "regime": regime.regime, "reason": regime.reason, "management": lifecycle_actions}
@@ -210,5 +221,6 @@ class XAUUSDAutonomousTrader:
             "success": False,
             "regime": regime.regime,
             "decision": decision.reason,
+            "order": order.raw if order else None,
             "management": lifecycle_actions,
         }
