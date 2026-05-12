@@ -33,6 +33,17 @@ def _pick_filling_mode(info: dict[str, Any]) -> int | None:
     return getattr(mt5, "ORDER_FILLING_RETURN", None)
 
 
+def _sanitize_comment(text: str, limit: int = 24) -> str:
+    allowed = []
+    for char in str(text):
+        if char.isalnum() or char in {" ", "_", "-", "."}:
+            allowed.append(char)
+    cleaned = "".join(allowed).strip()
+    if not cleaned:
+        cleaned = "xauusd"
+    return cleaned[:limit]
+
+
 @dataclass
 class MT5Broker:
     config: dict[str, Any]
@@ -187,7 +198,7 @@ class MT5Broker:
             "tp": tp,
             "deviation": int(deviation),
             "magic": int(magic),
-            "comment": comment[:31],
+            "comment": _sanitize_comment(comment),
             "type_time": mt5.ORDER_TIME_GTC,
         }
         request = self._prepare_trade_request(symbol, request)
@@ -262,7 +273,7 @@ class MT5Broker:
             "price": price,
             "deviation": int(deviation),
             "magic": int(magic),
-            "comment": "position close",
+            "comment": "close",
             "type_time": mt5.ORDER_TIME_GTC,
         }
         request = self._prepare_trade_request(symbol, request)
@@ -313,7 +324,7 @@ class MT5Broker:
             "tp": tp,
             "deviation": int(deviation),
             "magic": int(magic),
-            "comment": comment[:31],
+            "comment": _sanitize_comment(comment),
             "type_time": mt5.ORDER_TIME_GTC,
         }
         request = self._prepare_trade_request(symbol, request)

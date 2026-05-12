@@ -127,7 +127,7 @@ class XAUUSDAutonomousTrader:
             lots=0.0,
             confidence=float(min(confidence, 0.98)),
             regime=regime,
-            reason=f"{reason} | ai={ai_hint.get('score', 0.5):.2f}",
+            reason=f"{reason} ai{ai_hint.get('score', 0.5):.2f}",
             partial_take_profit=float(partial),
             trailing_start_r=trailing_start,
             max_hold_bars=int(self.config["strategy"].get("max_hold_bars", 20)),
