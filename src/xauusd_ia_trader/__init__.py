@@ -1,5 +1,4 @@
 from .broker import MT5Broker
-from .cli import main
 from .execution import ExecutionEngine
 from .notifier import NotificationBus
 from .risk import RiskManager
@@ -11,6 +10,4 @@ __all__ = [
     "NotificationBus",
     "RiskManager",
     "XAUUSDAutonomousTrader",
-    "main",
 ]
-
