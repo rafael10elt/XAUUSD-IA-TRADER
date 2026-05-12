@@ -43,8 +43,9 @@ strategy:
   max_hold_bars: 20
 ai:
   enabled: true
-  hf_model: Qwen/Qwen2.5-7B-Instruct-1M
+  hf_model: llama-3.1-8b-instant
   timeout_seconds: 12
+  hf_api_key: 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
 notifications:
   enabled: true
   queue_file: xauusd_push_queue.txt

@@ -1,0 +1,4204 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.env.example
+.gitignore
+configs/default.yaml
+mql5/XAUUSD_PushBridge.mq5
+pyproject.toml
+README.md
+requirements.txt
+src/xauusd_ia_trader.egg-info/dependency_links.txt
+src/xauusd_ia_trader.egg-info/PKG-INFO
+src/xauusd_ia_trader.egg-info/SOURCES.txt
+src/xauusd_ia_trader.egg-info/top_level.txt
+src/xauusd_ia_trader/__init__.py
+src/xauusd_ia_trader/ai.py
+src/xauusd_ia_trader/broker.py
+src/xauusd_ia_trader/cli.py
+src/xauusd_ia_trader/config.py
+src/xauusd_ia_trader/execution.py
+src/xauusd_ia_trader/gui.py
+src/xauusd_ia_trader/indicators.py
+src/xauusd_ia_trader/models.py
+src/xauusd_ia_trader/notifier.py
+src/xauusd_ia_trader/regime.py
+src/xauusd_ia_trader/risk.py
+src/xauusd_ia_trader/state_store.py
+src/xauusd_ia_trader/trader.py
+tests/test_execution.py
+tests/test_regime.py
+tests/test_risk.py
+tests/test_state_store.py
+XAUUSD_MT5_Autonomous_Scalper_Spec.md
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".gitignore">
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.pyc
+*.pyo
+*.pyd
+*.log
+runtime/
+models/
+outputs/
+.env
+</file>
+
+<file path="pyproject.toml">
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xauusd-ia-trader"
+version = "0.1.0"
+description = "Autonomous XAUUSD MT5 scalper with regime adaptation and prop-firm risk controls"
+requires-python = ">=3.11"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+</file>
+
+<file path="src/xauusd_ia_trader.egg-info/dependency_links.txt">
+
+</file>
+
+<file path="src/xauusd_ia_trader.egg-info/PKG-INFO">
+Metadata-Version: 2.4
+Name: xauusd-ia-trader
+Version: 0.1.0
+Summary: Autonomous XAUUSD MT5 scalper with regime adaptation and prop-firm risk controls
+Requires-Python: >=3.11
+</file>
+
+<file path="src/xauusd_ia_trader.egg-info/SOURCES.txt">
+README.md
+pyproject.toml
+src/xauusd_ia_trader/__init__.py
+src/xauusd_ia_trader/ai.py
+src/xauusd_ia_trader/broker.py
+src/xauusd_ia_trader/cli.py
+src/xauusd_ia_trader/config.py
+src/xauusd_ia_trader/execution.py
+src/xauusd_ia_trader/indicators.py
+src/xauusd_ia_trader/models.py
+src/xauusd_ia_trader/notifier.py
+src/xauusd_ia_trader/regime.py
+src/xauusd_ia_trader/risk.py
+src/xauusd_ia_trader/state_store.py
+src/xauusd_ia_trader/trader.py
+src/xauusd_ia_trader.egg-info/PKG-INFO
+src/xauusd_ia_trader.egg-info/SOURCES.txt
+src/xauusd_ia_trader.egg-info/dependency_links.txt
+src/xauusd_ia_trader.egg-info/top_level.txt
+tests/test_execution.py
+tests/test_regime.py
+tests/test_risk.py
+tests/test_state_store.py
+</file>
+
+<file path="src/xauusd_ia_trader.egg-info/top_level.txt">
+xauusd_ia_trader
+</file>
+
+<file path="src/xauusd_ia_trader/indicators.py">
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+
+
+def _ema(series: pd.Series, span: int) -> pd.Series:
+    return series.ewm(span=span, adjust=False).mean()
+
+
+def _atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    high = df["high"]
+    low = df["low"]
+    close = df["close"]
+    prev_close = close.shift(1)
+    tr = pd.concat(
+        [(high - low), (high - prev_close).abs(), (low - prev_close).abs()],
+        axis=1,
+    ).max(axis=1)
+    return tr.rolling(period).mean()
+
+
+def _rsi(series: pd.Series, period: int = 14) -> pd.Series:
+    delta = series.diff()
+    gain = delta.clip(lower=0).rolling(period).mean()
+    loss = (-delta.clip(upper=0)).rolling(period).mean()
+    rs = gain / loss.replace(0, np.nan)
+    return 100 - (100 / (1 + rs))
+
+
+def _adx(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
+    high = df["high"]
+    low = df["low"]
+    close = df["close"]
+    up_move = high.diff()
+    down_move = -low.diff()
+
+    plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
+    minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
+
+    tr = _atr(df, period)
+    plus_di = 100 * pd.Series(plus_dm, index=df.index).rolling(period).sum() / tr
+    minus_di = 100 * pd.Series(minus_dm, index=df.index).rolling(period).sum() / tr
+    dx = (100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan))
+    adx = dx.rolling(period).mean()
+    return pd.DataFrame({"adx": adx, "plus_di": plus_di, "minus_di": minus_di})
+
+
+def add_features(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df.copy()
+
+    data = df.copy()
+    if "close" not in data.columns:
+        raise ValueError("DataFrame must contain OHLC columns")
+
+    data["ema_20"] = _ema(data["close"], 20)
+    data["ema_50"] = _ema(data["close"], 50)
+    data["ema_200"] = _ema(data["close"], 200)
+    data["atr_14"] = _atr(data, 14)
+    data["rsi_14"] = _rsi(data["close"], 14)
+    adx = _adx(data, 14)
+    data["adx_14"] = adx["adx"]
+    data["plus_di_14"] = adx["plus_di"]
+    data["minus_di_14"] = adx["minus_di"]
+    data["rolling_high_20"] = data["high"].rolling(20).max()
+    data["rolling_low_20"] = data["low"].rolling(20).min()
+    data["range_20"] = data["high"].rolling(20).max() - data["low"].rolling(20).min()
+    data["body"] = (data["close"] - data["open"]).abs()
+    data["wick_up"] = data["high"] - data[["open", "close"]].max(axis=1)
+    data["wick_down"] = data[["open", "close"]].min(axis=1) - data["low"]
+    data["mid_price"] = (data["high"] + data["low"]) / 2.0
+    data["volatility_ratio"] = data["atr_14"] / data["close"].replace(0, np.nan)
+
+    if "tick_volume" in data.columns:
+        vol = data["tick_volume"].replace(0, np.nan)
+        data["volume_z"] = (vol - vol.rolling(20).mean()) / vol.rolling(20).std()
+    else:
+        data["volume_z"] = np.nan
+
+    return data
+</file>
+
+<file path="src/xauusd_ia_trader/regime.py">
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+import pandas as pd
+
+
+@dataclass(slots=True)
+class RegimeResult:
+    regime: str
+    confidence: float
+    reason: str
+
+
+def classify_regime(df: pd.DataFrame, *, config: dict[str, Any]) -> RegimeResult:
+    if df.empty:
+        return RegimeResult("no_trade", 0.0, "empty dataframe")
+
+    latest = df.iloc[-1]
+    price = float(latest.get("close", 0) or 0)
+    ema_fast = float(latest.get("ema_20", price) or price)
+    ema_slow = float(latest.get("ema_50", price) or price)
+    adx = float(latest.get("adx_14", 0) or 0)
+    rsi = float(latest.get("rsi_14", 50) or 50)
+    atr = float(latest.get("atr_14", 0) or 0)
+    range_20 = float(latest.get("range_20", 0) or 0)
+    rolling_high = float(latest.get("rolling_high_20", price) or price)
+    rolling_low = float(latest.get("rolling_low_20", price) or price)
+    middle = (rolling_high + rolling_low) / 2.0 if rolling_high and rolling_low else price
+
+    if adx >= 22 and ema_fast > ema_slow and price >= ema_fast:
+        return RegimeResult("trend_up", 0.82, "adx and ema alignment support trend continuation")
+    if adx >= 22 and ema_fast < ema_slow and price <= ema_fast:
+        return RegimeResult("trend_down", 0.82, "adx and ema alignment support trend continuation")
+
+    if adx < 18 and abs(price - middle) <= max(atr * 0.8, range_20 * 0.15):
+        return RegimeResult("range", 0.73, "weak adx and mean reversion around midrange")
+
+    if range_20 and atr and range_20 < atr * 1.8 and adx < 22:
+        return RegimeResult("compression", 0.68, "compression suggests possible breakout setup")
+
+    if rsi > 72 and ema_fast >= ema_slow:
+        return RegimeResult("trend_up", 0.62, "overheated but trend structure remains bullish")
+    if rsi < 28 and ema_fast <= ema_slow:
+        return RegimeResult("trend_down", 0.62, "oversold but trend structure remains bearish")
+
+    return RegimeResult("no_trade", 0.51, "market conditions are not clean enough")
+</file>
+
+<file path="src/xauusd_ia_trader/state_store.py">
+from __future__ import annotations
+
+import json
+from dataclasses import asdict
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from .models import PositionLifecycle
+
+
+class PositionStateStore:
+    def __init__(self, path: str | Path = "runtime/position_state.json"):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._items: dict[str, PositionLifecycle] = {}
+        self.load()
+
+    def load(self) -> None:
+        if not self.path.exists():
+            self._items = {}
+            return
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except Exception:
+            self._items = {}
+            return
+        items: dict[str, PositionLifecycle] = {}
+        if isinstance(raw, dict):
+            for key, payload in raw.items():
+                if not isinstance(payload, dict):
+                    continue
+                try:
+                    items[str(key)] = PositionLifecycle(**payload)
+                except Exception:
+                    continue
+        self._items = items
+
+    def save(self) -> None:
+        payload = {ticket: asdict(item) for ticket, item in self._items.items()}
+        self.path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
+
+    def upsert(self, item: PositionLifecycle) -> None:
+        self._items[str(item.ticket)] = item
+        self.save()
+
+    def get(self, ticket: int) -> PositionLifecycle | None:
+        return self._items.get(str(ticket))
+
+    def remove(self, ticket: int) -> None:
+        self._items.pop(str(ticket), None)
+        self.save()
+
+    def items(self) -> list[PositionLifecycle]:
+        return list(self._items.values())
+
+    def active_items(self, symbol: str | None = None) -> list[PositionLifecycle]:
+        items = self.items()
+        if symbol:
+            return [item for item in items if item.symbol == symbol and item.remaining_volume > 0]
+        return [item for item in items if item.remaining_volume > 0]
+
+    def mark_action(
+        self,
+        ticket: int,
+        *,
+        partial_done: bool | None = None,
+        breakeven_done: bool | None = None,
+        trailing_done: bool | None = None,
+        remaining_volume: float | None = None,
+        stop_loss: float | None = None,
+        take_profit: float | None = None,
+    ) -> None:
+        item = self.get(ticket)
+        if item is None:
+            return
+        if partial_done is not None:
+            item.partial_done = partial_done
+        if breakeven_done is not None:
+            item.breakeven_done = breakeven_done
+        if trailing_done is not None:
+            item.trailing_done = trailing_done
+        if remaining_volume is not None:
+            item.remaining_volume = remaining_volume
+        if stop_loss is not None:
+            item.stop_loss = stop_loss
+        if take_profit is not None:
+            item.take_profit = take_profit
+        item.updated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+        self.upsert(item)
+</file>
+
+<file path="tests/test_execution.py">
+from xauusd_ia_trader.execution import ExecutionEngine
+from xauusd_ia_trader.models import PositionLifecycle
+from xauusd_ia_trader.risk import RiskManager
+from xauusd_ia_trader.state_store import PositionStateStore
+
+
+class DummyNotifier:
+    def __init__(self):
+        self.events = []
+
+    def info(self, title, message, *, symbol=None, priority=1):
+        self.events.append(("info", title, message, symbol, priority))
+
+    def warn(self, title, message, *, symbol=None, priority=2):
+        self.events.append(("warn", title, message, symbol, priority))
+
+    def error(self, title, message, *, symbol=None, priority=0):
+        self.events.append(("error", title, message, symbol, priority))
+
+
+class DummyBroker:
+    def symbol_info(self, symbol):
+        return {"volume_step": 0.01, "volume_min": 0.01, "point": 0.01, "trade_stops_level": 5}
+
+    def positions_get(self, symbol=None, magic=None):
+        return []
+
+
+def test_manage_positions_moves_breakeven(tmp_path):
+    store = PositionStateStore(tmp_path / "positions.json")
+    store.upsert(
+        PositionLifecycle(
+            ticket=7,
+            symbol="XAUUSD",
+            side="buy",
+            initial_volume=0.10,
+            remaining_volume=0.10,
+            price_open=100.0,
+            stop_loss=95.0,
+            take_profit=110.0,
+            created_at="2026-01-01T00:00:00Z",
+            updated_at="2026-01-01T00:00:00Z",
+            regime="trend_up",
+            reason="test",
+        )
+    )
+    engine = ExecutionEngine(
+        broker=DummyBroker(),
+        risk=RiskManager({
+            "risk_per_trade": 0.01,
+            "max_consecutive_losses": 3,
+            "max_trades_per_day": 5,
+            "max_open_positions": 1,
+            "max_spread_points": 100,
+            "breakeven_trigger_r": 0.9,
+            "partial_take_profit_r": 1.0,
+            "trailing_start_r": 1.2,
+            "trailing_atr_mult": 1.2,
+            "trailing_step_points": 10.0,
+            "session_start": "00:00",
+            "session_end": "23:59",
+        }),
+        notifier=DummyNotifier(),
+        magic=2401001,
+        state_store=store,
+        paper_mode=True,
+    )
+
+    actions = engine.manage_positions(symbol="XAUUSD", current_price=105.0, atr=2.0, spread_points=5.0)
+    assert any(action["action"] == "breakeven" for action in actions)
+</file>
+
+<file path="tests/test_regime.py">
+import pandas as pd
+
+from xauusd_ia_trader.indicators import add_features
+from xauusd_ia_trader.regime import classify_regime
+
+
+def test_regime_classification_runs():
+    df = pd.DataFrame(
+        {
+            "open": [2300, 2302, 2304, 2306, 2308, 2310, 2312, 2314, 2316, 2318],
+            "high": [2301, 2303, 2305, 2307, 2309, 2311, 2313, 2315, 2317, 2319],
+            "low": [2299, 2301, 2303, 2305, 2307, 2309, 2311, 2313, 2315, 2317],
+            "close": [2300.5, 2302.5, 2304.5, 2306.5, 2308.5, 2310.5, 2312.5, 2314.5, 2316.5, 2318.5],
+            "tick_volume": [100, 120, 140, 160, 180, 200, 220, 240, 260, 280],
+        }
+    )
+    features = add_features(df)
+    result = classify_regime(features, config={})
+    assert result.regime in {"trend_up", "trend_down", "range", "compression", "no_trade"}
+</file>
+
+<file path="tests/test_state_store.py">
+from xauusd_ia_trader.models import PositionLifecycle
+from xauusd_ia_trader.state_store import PositionStateStore
+
+
+def test_state_store_persists_positions(tmp_path):
+    path = tmp_path / "position_state.json"
+    store = PositionStateStore(path)
+    store.upsert(
+        PositionLifecycle(
+            ticket=1001,
+            symbol="XAUUSD",
+            side="buy",
+            initial_volume=0.1,
+            remaining_volume=0.1,
+            price_open=2300.0,
+            stop_loss=2295.0,
+            take_profit=2310.0,
+            created_at="2026-01-01T00:00:00Z",
+            updated_at="2026-01-01T00:00:00Z",
+            regime="trend_up",
+            reason="test",
+        )
+    )
+
+    reloaded = PositionStateStore(path)
+    item = reloaded.get(1001)
+    assert item is not None
+    assert item.symbol == "XAUUSD"
+    assert item.remaining_volume == 0.1
+</file>
+
+<file path="XAUUSD_MT5_Autonomous_Scalper_Spec.md">
+# XAUUSD MT5 Autonomous Scalper - Project Spec
+
+## Goal
+Build an autonomous XAUUSD scalping system for MetaTrader 5 that:
+- Adapts to the current market regime.
+- Uses fast local execution.
+- Enforces strict prop firm risk limits.
+- Sends push notifications during the full trade lifecycle.
+- Remains auditable and easy to pause or disable.
+
+## Core Principle
+This should not be a "fully free-form AI trader".
+The best approach is:
+- AI for context and adaptation.
+- Deterministic rules for execution and risk.
+- Hard safety limits that cannot be overridden by model output.
+
+## Target Outcome
+The bot should be able to:
+- Detect market regime.
+- Decide whether to trade or stay flat.
+- Choose market or pending entry.
+- Set dynamic SL and TP.
+- Move stop to breakeven.
+- Trail profit when conditions allow.
+- Respect daily loss, drawdown, spread, and trade-count limits.
+- Notify the user through MT5 push messages at each key step.
+
+## Recommended Base
+Use `ForexScalperAI` as the implementation base.
+Why:
+- It already has MT5 connection logic.
+- It already has execution and risk layers.
+- It already has multi-component architecture.
+- It is closer to live trading than the other repos.
+
+## System Architecture
+
+### 1. Market Data Layer
+Responsible for:
+- Reading MT5 candles and ticks.
+- Calculating spreads and session state.
+- Building higher timeframe context.
+- Detecting volatility bursts and compression.
+- Detecting news-risk windows if available.
+
+Suggested inputs:
+- M1 for entry timing.
+- M5 for structure and confirmation.
+- M15 for regime context.
+
+Suggested indicators:
+- ATR
+- VWAP
+- EMA 20 / EMA 50
+- RSI
+- ADX
+- Previous day high/low
+- Session high/low
+- Candle body / wick ratios
+- Spread in points
+- Recent tick momentum
+
+### 2. Regime Classifier
+This layer decides which state the market is in.
+
+Possible regimes:
+- Trend continuation
+- Trend pullback
+- Range mean reversion
+- Breakout expansion
+- No trade
+
+This can be implemented as:
+- A simple rules engine first.
+- Later, a lightweight classifier.
+
+For the first version, rules are enough:
+- Trend if EMA alignment + ADX + directional candle structure.
+- Range if ADX is weak and price is mean-reverting around VWAP or mid-band.
+- Breakout if compression is followed by range expansion and volume/tick impulse.
+
+### 3. Decision Engine
+The decision engine chooses:
+- Direction: buy / sell / no trade.
+- Entry mode: market or pending.
+- Initial stop loss.
+- Initial take profit.
+- Whether to allow partial exit.
+- Whether to allow trailing stop.
+
+Important:
+- The AI should not be allowed to bypass risk limits.
+- The AI can suggest, but the risk layer approves or rejects.
+
+### 4. Execution Engine
+Responsible for:
+- Sending orders to MT5.
+- Handling slippage limits.
+- Validating symbol availability.
+- Verifying spread before entry.
+- Re-quoting or canceling if conditions changed.
+- Managing order states and fills.
+
+Execution modes:
+- Market order for fast continuation or breakout entries.
+- Pending order for pullback or retest setups.
+
+### 5. Risk Engine
+This is the most important part for prop firm use.
+
+Hard limits suggested for the first version:
+- Risk per trade: 0.25% to 0.5%
+- Daily max loss: 1% to 2%
+- Max open positions: 1
+- Max losses in a row: 2 or 3
+- Max trades per day: 3 to 6
+- Max spread threshold: dynamic, based on ATR and recent median spread
+- No trading during major news windows
+- No trading when spread spikes abnormally
+- No trading when drawdown is near the daily cap
+- No trading when the market is too quiet or too chaotic
+
+Risk logic should enforce:
+- Position size from stop distance.
+- Lot size rounded to broker step.
+- Hard stop loss on every trade.
+- Daily lockout if limits are hit.
+- Emergency close if overall drawdown exceeds a threshold.
+
+### 6. Position Management
+After entry, the bot should be able to:
+- Move SL to breakeven after the trade validates.
+- Partially close at 1R if the strategy supports it.
+- Trail the stop once momentum is confirmed.
+- Exit if regime changes against the trade.
+- Exit if time-in-trade exceeds the max holding window.
+
+Suggested management rules:
+- Breakeven trigger: around 0.8R to 1R.
+- Partial take profit: 25% to 50% at 1R.
+- Final target: 1.5R to 2.5R depending on regime.
+- Time stop: close stale trades after a defined bar count.
+
+## XAUUSD-Specific Strategy Logic
+
+### Trend Scalping
+Use when:
+- EMA 20 > EMA 50 for buys, or reverse for sells.
+- ADX confirms directional movement.
+- Price holds above/below VWAP.
+- Spread is acceptable.
+
+Entry ideas:
+- Breakout with confirmation candle.
+- Pullback to EMA or VWAP with rejection.
+
+### Range Scalping
+Use when:
+- ADX is weak.
+- Price repeatedly reverts around VWAP.
+- Market is not expanding.
+
+Entry ideas:
+- Fade extremes near session range.
+- Take smaller targets and tighter time stop.
+
+### Breakout Scalping
+Use when:
+- Compression is visible.
+- Session open or high-liquidity window is active.
+- Price breaks a key intraday level.
+
+Entry ideas:
+- Market order after confirmation.
+- Pending stop order beyond the breakout level.
+
+### No-Trade Mode
+The bot should immediately switch to no-trade if:
+- News risk is high.
+- Spread is too large.
+- Volatility is too erratic.
+- The bot has hit a daily limit.
+- The market structure is unclear.
+
+## Dynamic SL and TP Design
+
+### Stop Loss
+Best approaches:
+- ATR-based stop.
+- Structure-based stop.
+- Hybrid stop: the wider of ATR and structure, capped by risk budget.
+
+Recommended behavior:
+- Initial SL must be present before entry.
+- SL distance should reflect current volatility.
+- If the stop becomes too wide, skip the trade.
+
+### Take Profit
+Best approaches:
+- Fixed R multiple.
+- Liquidity target.
+- Hybrid target with partial exit.
+
+Recommended behavior:
+- TP1 at 1R or near first liquidity pocket.
+- TP2 at 1.5R to 2.5R depending on regime.
+- Optional trailing for the remainder.
+
+### Entry Mode
+Market order if:
+- Momentum is already confirmed.
+- The move is already underway.
+- The setup has a strong probability of continuation.
+
+Pending order if:
+- A retest is expected.
+- Liquidity sweep or pullback is preferred.
+- You want better fill quality.
+
+## Model / AI Layer
+
+### What AI Should Do
+Use AI for:
+- Regime classification support.
+- Context interpretation.
+- Parameter adaptation.
+- Filtering bad conditions.
+- Summarizing market state for logs and alerts.
+
+### What AI Should Not Do
+Do not let AI:
+- Bypass a daily loss limit.
+- Remove a stop loss.
+- Increase lot size beyond policy.
+- Trade during blocked sessions.
+- Send order directly without risk approval.
+
+### Hugging Face API
+Useful for:
+- Secondary analysis.
+- Regime summaries.
+- Sentiment or contextual scoring.
+
+Not ideal for:
+- Tick-level critical decision making.
+- Millisecond-sensitive entry execution.
+
+Recommendation:
+- Keep execution local.
+- Use Hugging Face only as an auxiliary intelligence layer.
+
+## Push Notifications in MT5
+
+### Important Constraint
+MT5 Python integration alone is not enough for native push notifications.
+The clean solution is:
+- Run an EA or MQL5 helper inside MT5 terminal.
+- Use `SendNotification()` from MQL5.
+
+### Required Setup
+On the MT5 terminal:
+- Enable push notifications in Options.
+- Enter the MetaQuotes ID of the mobile app.
+- Confirm the terminal can send test notifications.
+
+### Notification Flow
+The system should notify at:
+- Bot start.
+- Data loaded.
+- Regime detected.
+- Trade signal generated.
+- Trade approved by risk.
+- Order submitted.
+- Order filled.
+- Order rejected.
+- SL/TP updated.
+- Breakeven moved.
+- Trailing activated.
+- Partial close executed.
+- Trade closed.
+- Daily limit reached.
+- Trading paused.
+- Trading resumed.
+- Fatal error or disconnect.
+
+### Notification Policy
+To avoid spam:
+- Coalesce repeated alerts.
+- Use priority levels.
+- Send only important state transitions.
+- Throttle repetitive messages.
+
+Suggested priority levels:
+- P0: emergency stop, disconnect, limit hit.
+- P1: entry, fill, exit, position management changes.
+- P2: regime change, pre-trade context.
+- P3: diagnostic logs.
+
+### Recommended Message Format
+Each push should be short and structured.
+
+Example:
+- `XAUUSD BUY approved | lot=0.10 | SL=2318.4 | TP=2324.1 | regime=trend`
+- `XAUUSD SL moved to BE | ticket=12345`
+- `Daily loss limit reached | trading paused`
+
+## Safety and Prop Firm Rules
+This project must be built around constraints first.
+
+Minimum safety requirements:
+- One open trade at a time.
+- No martingale.
+- No grid.
+- No averaging down.
+- No widening SL after entry.
+- No trading after daily loss limit.
+- No revenge re-entry after a loss.
+- No trade if spread exceeds threshold.
+- No trade during blocked news windows.
+- No trade if latency is unstable.
+
+Recommended extra limits:
+- Daily session cap.
+- Cooldown after loss.
+- Pause after two consecutive losses.
+- Pause after slippage spike.
+- Pause if market conditions become unmodelable.
+
+## Operational Flow
+1. Load config.
+2. Connect to MT5.
+3. Verify symbol, spread, and terminal health.
+4. Read candles and compute context.
+5. Classify regime.
+6. Build setup proposal.
+7. Validate with risk engine.
+8. Submit order.
+9. Monitor fill.
+10. Manage position.
+11. Notify each major state change.
+12. Lock out trading if rules are hit.
+
+## Recommended Project Structure
+
+If we extend `ForexScalperAI`, I would organize the XAUUSD logic like this:
+
+- `src/mt5/`
+  - connection, data feed, execution, notifications
+- `src/strategy/`
+  - regime logic, entry models, exit models
+- `src/risk/`
+  - trade limits, drawdown, sizing, spread filters
+- `src/ai/`
+  - Hugging Face adapter and regime assistant
+- `src/alerts/`
+  - MT5 notification formatting and throttling
+- `src/monitoring/`
+  - session status, logging, metrics
+
+## Suggested MVP Phases
+
+### Phase 1
+- MT5 connection
+- XAUUSD symbol handling
+- data feed
+- risk gate
+- push notifications
+- paper trading only
+
+### Phase 2
+- regime classifier
+- market vs pending entry selection
+- dynamic SL and TP
+- breakeven logic
+- basic trailing stop
+
+### Phase 3
+- prop-firm hardening
+- news filter
+- spread filter
+- trade cooldowns
+- daily lockout logic
+
+### Phase 4
+- AI regime assistant
+- Hugging Face contextual layer
+- adaptive parameter tuning
+- better monitoring and alerts
+
+### Phase 5
+- live demo validation
+- forward test
+- calibration for prop rules
+- only then consider live funding rules
+
+## Backlog of Implementation
+
+### P0 - Must Have
+1. Define the XAUUSD trading contract and broker symbol mapping.
+2. Implement MT5 connection health checks.
+3. Add push notification helper using MQL5 `SendNotification()`.
+4. Add notification throttling and priority levels.
+5. Add daily loss limit, drawdown limit, and trade-count limits.
+6. Add spread filter and session filter.
+7. Add one-position-at-a-time enforcement.
+8. Add mandatory SL on every order.
+9. Add emergency shutdown and lockout.
+
+### P1 - Core Trading Logic
+1. Implement market-state detection.
+2. Implement trend/range/breakout regime classification.
+3. Implement setup generation for XAUUSD.
+4. Implement market vs pending order selection.
+5. Implement ATR/structure-based dynamic SL.
+6. Implement RR-based TP selection.
+7. Implement breakeven management.
+8. Implement trailing stop after validation.
+
+### P2 - Intelligence Layer
+1. Add Hugging Face adapter.
+2. Add AI-assisted regime summary.
+3. Add adaptive parameter suggestions.
+4. Add pre-trade quality scoring.
+5. Add post-trade review summary.
+
+### P3 - Monitoring and Reliability
+1. Add structured logs.
+2. Add session dashboard or console monitor.
+3. Add reconnect and recovery flows.
+4. Add position reconciliation with MT5.
+5. Add alert deduplication.
+6. Add performance metrics.
+
+### P4 - Prop Firm Hardening
+1. Add time-of-day lockouts.
+2. Add news blackout windows.
+3. Add volatility spike protection.
+4. Add loss-streak cooldown.
+5. Add weekly review mode.
+6. Add compliance report for each session.
+
+### P5 - Validation
+1. Backtest on historical XAUUSD data.
+2. Forward test on demo.
+3. Simulate prop firm rule set.
+4. Measure slippage, fill rate, win rate, and drawdown.
+5. Only then consider live deployment.
+
+## Final Recommendation
+Yes, this is feasible.
+
+But for a prop-firm target, the winning formula is:
+- simple and fast execution,
+- strong risk control,
+- limited AI in the critical path,
+- disciplined notification and monitoring,
+- gradual rollout from demo to live.
+
+The system should be designed to survive bad market conditions, not just look intelligent in good ones.
+</file>
+
+<file path="requirements.txt">
+loguru>=0.7.2
+numpy>=1.26.4
+pandas>=2.2.2
+pyyaml>=6.0.1
+python-dotenv>=1.0.1
+requests>=2.32.3
+pydantic>=2.8.2
+pytest>=8.3.2
+
+# Optional at runtime when MT5 is available.
+MetaTrader5>=5.0.45 ; sys_platform == "win32"
+</file>
+
+<file path="src/xauusd_ia_trader/__init__.py">
+from .broker import MT5Broker
+from .execution import ExecutionEngine
+from .notifier import NotificationBus
+from .risk import RiskManager
+from .trader import XAUUSDAutonomousTrader
+
+__all__ = [
+    "MT5Broker",
+    "ExecutionEngine",
+    "NotificationBus",
+    "RiskManager",
+    "XAUUSDAutonomousTrader",
+]
+</file>
+
+<file path="src/xauusd_ia_trader/models.py">
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Optional
+
+
+@dataclass(slots=True)
+class MarketSnapshot:
+    symbol: str
+    timeframe: str
+    as_of: datetime
+    regime: str
+    spread_points: float
+    features: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class TradeIdea:
+    symbol: str
+    side: str
+    entry_mode: str
+    entry_price: float
+    stop_loss: float
+    take_profit: float
+    lots: float
+    confidence: float
+    regime: str
+    reason: str
+    partial_take_profit: Optional[float] = None
+    trailing_start_r: Optional[float] = None
+    max_hold_bars: int = 0
+
+
+@dataclass(slots=True)
+class RiskDecision:
+    approved: bool
+    reason: str
+    risk_amount: float
+    lots: float
+    daily_locked: bool = False
+    spread_blocked: bool = False
+
+
+@dataclass(slots=True)
+class OrderResult:
+    success: bool
+    message: str
+    ticket: Optional[int] = None
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class PositionView:
+    ticket: int
+    symbol: str
+    side: str
+    volume: float
+    price_open: float
+    stop_loss: float
+    take_profit: float
+    current_price: float
+    profit: float
+    magic: int = 0
+    comment: str = ""
+
+
+@dataclass(slots=True)
+class PositionLifecycle:
+    ticket: int
+    symbol: str
+    side: str
+    initial_volume: float
+    remaining_volume: float
+    price_open: float
+    stop_loss: float
+    take_profit: float
+    partial_done: bool = False
+    breakeven_done: bool = False
+    trailing_done: bool = False
+    created_at: str = ""
+    updated_at: str = ""
+    regime: str = ""
+    reason: str = ""
+</file>
+
+<file path="tests/test_risk.py">
+from xauusd_ia_trader.risk import RiskManager
+from xauusd_ia_trader.models import TradeIdea
+
+
+def test_risk_rejects_invalid_rr():
+    risk = RiskManager({"risk_per_trade": 0.01, "min_rr": 1.5, "max_trades_per_day": 5, "max_open_positions": 1, "max_spread_points": 100, "session_start": "00:00", "session_end": "23:59"})
+    idea = TradeIdea("XAUUSD", "buy", "market", 2300.0, 2295.0, 2301.0, 0.0, 0.8, "trend_up", "test")
+    decision = risk.validate(idea, equity=10000, spread_points=10, symbol_info={"point": 0.01, "trade_tick_size": 0.01, "trade_tick_value": 1.0, "volume_step": 0.01, "volume_min": 0.01, "volume_max": 10})
+    assert not decision.approved
+
+
+def test_risk_locks_after_consecutive_losses():
+    risk = RiskManager({
+        "risk_per_trade": 0.01,
+        "min_rr": 1.2,
+        "max_consecutive_losses": 2,
+        "max_trades_per_day": 5,
+        "max_open_positions": 1,
+        "max_spread_points": 100,
+        "session_start": "00:00",
+        "session_end": "23:59",
+    })
+    risk.state.day_key = risk._today_key()
+    risk.state.consecutive_losses = 2
+    idea = TradeIdea("XAUUSD", "buy", "market", 2300.0, 2298.0, 2304.0, 0.0, 0.8, "trend_up", "test")
+    decision = risk.validate(
+        idea,
+        equity=10000,
+        spread_points=10,
+        symbol_info={"point": 0.01, "trade_tick_size": 0.01, "trade_tick_value": 1.0, "volume_step": 0.01, "volume_min": 0.01, "volume_max": 10},
+    )
+    assert not decision.approved
+    assert decision.daily_locked
+
+
+def test_risk_locks_after_daily_loss_limit():
+    risk = RiskManager({
+        "risk_per_trade": 0.01,
+        "daily_loss_limit": 0.02,
+        "min_rr": 1.2,
+        "max_trades_per_day": 5,
+        "max_open_positions": 1,
+        "max_spread_points": 100,
+        "session_start": "00:00",
+        "session_end": "23:59",
+    })
+    risk.state.highest_equity = 10000
+    risk.register_exit(-250)
+    assert risk.state.locked
+    assert risk.state.last_lock_reason == "daily loss limit reached"
+</file>
+
+<file path="mql5/XAUUSD_PushBridge.mq5">
+#property strict
+
+input string QueueFileName = "xauusd_push_queue.txt";
+input int TimerSeconds = 2;
+
+ulong g_last_position = 0;
+
+int OnInit()
+{
+   EventSetTimer(TimerSeconds);
+   Print("XAUUSD Push Bridge initialized");
+   return(INIT_SUCCEEDED);
+}
+
+void OnDeinit(const int reason)
+{
+   EventKillTimer();
+}
+
+void OnTimer()
+{
+   int handle = FileOpen(QueueFileName, FILE_READ | FILE_TXT | FILE_COMMON | FILE_SHARE_READ | FILE_ANSI);
+   if(handle == INVALID_HANDLE)
+      return;
+
+   ulong size = (ulong)FileSize(handle);
+   if(g_last_position > size)
+      g_last_position = 0;
+
+   FileSeek(handle, (long)g_last_position, SEEK_SET);
+
+   while(!FileIsEnding(handle))
+   {
+      string line = FileReadString(handle);
+      if(StringLen(line) > 0)
+      {
+         SendNotification(line);
+         Print(line);
+      }
+   }
+
+   g_last_position = (ulong)FileTell(handle);
+   FileClose(handle);
+}
+</file>
+
+<file path="src/xauusd_ia_trader/cli.py">
+from __future__ import annotations
+
+import argparse
+import time
+from pathlib import Path
+
+from .config import load_config
+from .gui import launch_gui
+from .trader import XAUUSDAutonomousTrader
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="xauusd-ia-trader")
+    parser.add_argument("--config", type=str, default="configs/default.yaml")
+    parser.add_argument("--once", action="store_true", help="Run one cycle and exit")
+    parser.add_argument("--sleep", type=int, default=30, help="Cycle delay when running continuously")
+    parser.add_argument("--force-side", choices=["buy", "sell"], default=None, help="Force a demo market order ignoring the regime")
+    parser.add_argument("--gui", action="store_true", help="Launch the interactive dashboard")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.gui:
+        launch_gui(Path(args.config))
+        return 0
+    config = load_config(Path(args.config))
+    trader = XAUUSDAutonomousTrader(config)
+
+    if args.once:
+        result = trader.run_once(force_side=args.force_side)
+        print(result)
+        return 0 if result.get("success") else 1
+
+    while True:
+        result = trader.run_once(force_side=args.force_side)
+        print(result)
+        time.sleep(max(5, args.sleep))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+</file>
+
+<file path="src/xauusd_ia_trader/config.py">
+from __future__ import annotations
+
+import copy
+import os
+from pathlib import Path
+from typing import Any
+
+import yaml
+from dotenv import load_dotenv
+
+DEFAULT_CONFIG: dict[str, Any] = {
+    "app": {
+        "symbol": "XAUUSD",
+        "timeframes": ["M1", "M5", "M15"],
+        "mode": "paper",
+        "cycle_seconds": 30,
+        "position_state_path": "runtime/position_state.json",
+    },
+    "broker": {
+        "terminal_path": "",
+        "login": 0,
+        "password": "",
+        "server": "",
+        "deviation": 20,
+        "magic": 2401001,
+    },
+    "risk": {
+        "risk_per_trade": 0.005,
+        "daily_loss_limit": 0.02,
+        "max_consecutive_losses": 3,
+        "max_trades_per_day": 5,
+        "max_open_positions": 1,
+        "max_spread_points": 80,
+        "breakeven_trigger_r": 0.9,
+        "partial_take_profit_r": 1.0,
+        "final_take_profit_r": 2.0,
+        "partial_close_ratio": 0.5,
+        "trailing_start_r": 1.2,
+        "trailing_atr_mult": 1.2,
+        "trailing_step_points": 10.0,
+        "min_rr": 1.2,
+        "session_start": "07:00",
+        "session_end": "20:30",
+    },
+    "strategy": {
+        "atr_period": 14,
+        "ema_fast": 20,
+        "ema_slow": 50,
+        "rsi_period": 14,
+        "adx_period": 14,
+        "breakout_lookback": 20,
+        "range_lookback": 30,
+        "confirmation_bars": 2,
+        "max_hold_bars": 20,
+    },
+    "ai": {
+        "enabled": False,
+        "hf_model": "",
+        "timeout_seconds": 12,
+    },
+    "notifications": {
+        "enabled": True,
+        "queue_file": "xauusd_push_queue.txt",
+        "min_priority": 1,
+    },
+}
+
+
+def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    result = copy.deepcopy(base)
+    for key, value in override.items():
+        if (
+            key in result
+            and isinstance(result[key], dict)
+            and isinstance(value, dict)
+        ):
+            result[key] = deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+def load_yaml_file(path: str | Path | None) -> dict[str, Any]:
+    if not path:
+        return {}
+    file_path = Path(path)
+    if not file_path.exists():
+        return {}
+    with file_path.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or {}
+    return data if isinstance(data, dict) else {}
+
+
+def load_config(path: str | Path | None = None) -> dict[str, Any]:
+    load_dotenv()
+    config = deep_merge(DEFAULT_CONFIG, load_yaml_file(path))
+
+    env_overrides = {
+        "app": {
+            "symbol": os.getenv("XAUUSD_SYMBOL", "").strip() or None,
+            "mode": os.getenv("XAUUSD_MODE", "").strip() or None,
+            "position_state_path": os.getenv("XAUUSD_POSITION_STATE_PATH", "").strip() or None,
+        },
+        "broker": {
+            "terminal_path": os.getenv("MT5_TERMINAL_PATH", "").strip() or None,
+            "login": os.getenv("MT5_LOGIN", "").strip() or None,
+            "password": os.getenv("MT5_PASSWORD", "").strip() or None,
+            "server": os.getenv("MT5_SERVER", "").strip() or None,
+            "deviation": os.getenv("MT5_DEVIATION", "").strip() or None,
+            "magic": os.getenv("MT5_MAGIC", "").strip() or None,
+        },
+        "notifications": {
+            "queue_file": os.getenv("MT5_QUEUE_FILE", "").strip() or None,
+        },
+    }
+    for section, values in env_overrides.items():
+        for key, value in values.items():
+            if value is None:
+                continue
+            if key in {"login", "deviation", "magic"}:
+                try:
+                    config[section][key] = int(value)
+                except ValueError:
+                    pass
+            else:
+                config[section][key] = value
+
+    config["ai"]["enabled"] = bool(
+        config.get("ai", {}).get("enabled", False)
+        and os.getenv("HF_API_KEY", "").strip()
+    )
+    return config
+</file>
+
+<file path="src/xauusd_ia_trader/risk.py">
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, time
+from typing import Any
+
+from .models import RiskDecision, TradeIdea
+
+
+@dataclass(slots=True)
+class RiskState:
+    day_key: str = ""
+    day_start_equity: float = 0.0
+    daily_pnl: float = 0.0
+    trades_today: int = 0
+    consecutive_losses: int = 0
+    locked: bool = False
+    last_lock_reason: str = ""
+    highest_equity: float = 0.0
+    open_positions: int = 0
+    last_update: datetime | None = None
+
+
+@dataclass
+class RiskManager:
+    config: dict[str, Any]
+    state: RiskState = field(default_factory=RiskState)
+
+    def _today_key(self) -> str:
+        return datetime.now(UTC).strftime("%Y-%m-%d")
+
+    def reset_if_new_day(self) -> None:
+        today = self._today_key()
+        if self.state.day_key != today:
+            self.state.day_key = today
+            self.state.day_start_equity = 0.0
+            self.state.daily_pnl = 0.0
+            self.state.trades_today = 0
+            self.state.consecutive_losses = 0
+            self.state.locked = False
+            self.state.last_lock_reason = ""
+
+    def sync_equity(self, equity: float) -> None:
+        self.reset_if_new_day()
+        if self.state.day_start_equity <= 0:
+            self.state.day_start_equity = float(equity)
+        self.state.highest_equity = max(self.state.highest_equity, float(equity))
+
+    def daily_pnl_from_equity(self, equity: float) -> float:
+        self.reset_if_new_day()
+        if self.state.day_start_equity <= 0:
+            return 0.0
+        return float(equity) - float(self.state.day_start_equity)
+
+    def session_allowed(self, now: datetime | None = None) -> bool:
+        now = now or datetime.now(UTC)
+        start = self.config.get("session_start", "07:00")
+        end = self.config.get("session_end", "20:30")
+        start_h, start_m = [int(x) for x in start.split(":")]
+        end_h, end_m = [int(x) for x in end.split(":")]
+        current = time(now.hour, now.minute)
+        return time(start_h, start_m) <= current <= time(end_h, end_m)
+
+    def calculate_risk_amount(self, equity: float) -> float:
+        return max(0.0, equity * float(self.config.get("risk_per_trade", 0.005)))
+
+    def calculate_lots(
+        self,
+        *,
+        equity: float,
+        entry_price: float,
+        stop_loss: float,
+        symbol_info: dict[str, Any] | None = None,
+        manual_lots: float | None = None,
+    ) -> float:
+        info = symbol_info or {}
+        risk_amount = self.calculate_risk_amount(equity)
+        tick_size = float(info.get("trade_tick_size") or info.get("point") or 0.01)
+        tick_value = float(info.get("trade_tick_value") or 1.0)
+        volume_step = float(info.get("volume_step") or 0.01)
+        volume_min = float(info.get("volume_min") or 0.01)
+        volume_max = float(info.get("volume_max") or 100.0)
+
+        if manual_lots is not None and float(manual_lots) > 0:
+            lots = float(manual_lots)
+            lots = max(volume_min, min(lots, volume_max))
+            steps = round(lots / volume_step)
+            lots = max(volume_min, steps * volume_step)
+            return round(lots, 2)
+
+        distance = abs(entry_price - stop_loss)
+        if distance <= 0 or tick_size <= 0 or tick_value <= 0:
+            return volume_min
+
+        ticks_to_stop = distance / tick_size
+        money_per_lot = ticks_to_stop * tick_value
+        if money_per_lot <= 0:
+            return volume_min
+
+        lots = risk_amount / money_per_lot
+        lots = max(volume_min, min(lots, volume_max))
+        steps = round(lots / volume_step)
+        lots = max(volume_min, steps * volume_step)
+        return round(lots, 2)
+
+    def validate(
+        self,
+        idea: TradeIdea,
+        *,
+        equity: float,
+        spread_points: float,
+        symbol_info: dict[str, Any] | None = None,
+    ) -> RiskDecision:
+        self.sync_equity(equity)
+
+        if self.state.locked:
+            return RiskDecision(False, self.state.last_lock_reason or "locked", 0.0, 0.0, daily_locked=True)
+
+        if not self.session_allowed():
+            return RiskDecision(False, "outside allowed session", 0.0, 0.0)
+
+        if self.state.consecutive_losses >= int(self.config.get("max_consecutive_losses", 3)):
+            self.state.locked = True
+            self.state.last_lock_reason = "consecutive loss limit reached"
+            return RiskDecision(False, self.state.last_lock_reason, 0.0, 0.0, daily_locked=True)
+
+        if self.state.trades_today >= int(self.config.get("max_trades_per_day", 5)):
+            self.state.locked = True
+            self.state.last_lock_reason = "daily trade limit reached"
+            return RiskDecision(False, self.state.last_lock_reason, 0.0, 0.0, daily_locked=True)
+
+        if self.state.open_positions >= int(self.config.get("max_open_positions", 1)):
+            return RiskDecision(False, "max open positions reached", 0.0, 0.0)
+
+        if spread_points > float(self.config.get("max_spread_points", 80)):
+            return RiskDecision(False, "spread too wide", 0.0, 0.0, spread_blocked=True)
+
+        if idea.entry_price <= 0 or idea.stop_loss <= 0 or idea.take_profit <= 0:
+            return RiskDecision(False, "invalid trade geometry", 0.0, 0.0)
+
+        risk_amount = self.calculate_risk_amount(equity)
+        if risk_amount <= 0:
+            return RiskDecision(False, "risk amount too small", 0.0, 0.0)
+
+        manual_lots = float(getattr(idea, "lots", 0.0) or 0.0)
+        lots = self.calculate_lots(
+            equity=equity,
+            entry_price=idea.entry_price,
+            stop_loss=idea.stop_loss,
+            symbol_info=symbol_info,
+            manual_lots=manual_lots if manual_lots > 0 else None,
+        )
+
+        rr = abs(idea.take_profit - idea.entry_price) / max(abs(idea.entry_price - idea.stop_loss), 1e-9)
+        if rr < float(self.config.get("min_rr", 1.2)):
+            return RiskDecision(False, "risk reward too low", risk_amount, 0.0)
+
+        if lots <= 0:
+            return RiskDecision(False, "lot size computed as zero", risk_amount, 0.0)
+
+        return RiskDecision(True, "approved", risk_amount, lots)
+
+    def register_entry(self) -> None:
+        self.state.trades_today += 1
+        self.state.open_positions += 1
+
+    def register_exit(self, pnl: float) -> None:
+        self.state.open_positions = max(0, self.state.open_positions - 1)
+        self.state.daily_pnl += pnl
+        if pnl < 0:
+            self.state.consecutive_losses += 1
+        else:
+            self.state.consecutive_losses = 0
+        self.state.highest_equity = max(self.state.highest_equity, self.state.day_start_equity + self.state.daily_pnl)
+
+        daily_loss_limit = abs(float(self.config.get("daily_loss_limit", 0.02)))
+        if self.state.daily_pnl <= -daily_loss_limit * max(self.state.highest_equity, 0.0):
+            self.state.locked = True
+            self.state.last_lock_reason = "daily loss limit reached"
+</file>
+
+<file path=".env.example">
+HF_API_KEY=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
+HF_MODEL=llama-3.3-70b-versatile
+MT5_COMMON_FILES_DIR=C:\Users\rafae\AppData\Roaming\MetaQuotes\Terminal\Common\Files
+MT5_QUEUE_FILE=xauusd_push_queue.txt
+MT5_TERMINAL_PATH=C:\Program Files\MetaTrader 5\terminal64.exe
+MT5_LOGIN=1513256820
+MT5_PASSWORD=4$Kr4!$!!6cA
+MT5_SERVER=FTMO-Demo
+MT5_DEVIATION=20
+MT5_MAGIC=2401001
+XAUUSD_SYMBOL=XAUUSD
+XAUUSD_MODE=live
+XAUUSD_POSITION_STATE_PATH=runtime/position_state.json
+</file>
+
+<file path="src/xauusd_ia_trader/ai.py">
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from typing import Any
+
+import requests
+
+
+@dataclass
+class HuggingFaceAdvisor:
+    enabled: bool = False
+    model: str = ""
+    timeout_seconds: int = 12
+    api_key: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.api_key:
+            self.api_key = os.getenv("HF_API_KEY", "").strip()
+        if not self.model:
+            self.model = os.getenv("HF_MODEL", "").strip()
+
+    def available(self) -> bool:
+        return self.enabled and bool(self.api_key and self.model)
+
+    def _candidate_models(self) -> list[str]:
+        preferred = [
+            self.model,
+            "Qwen/Qwen2.5-7B-Instruct",
+            "Qwen/Qwen2.5-7B-Instruct-1M",
+            "google/gemma-2-2b-it",
+        ]
+        seen: set[str] = set()
+        candidates: list[str] = []
+        for item in preferred:
+            model = str(item or "").strip()
+            if not model or model in seen:
+                continue
+            seen.add(model)
+            candidates.append(model)
+        return candidates
+
+    def _router_chat(
+        self,
+        model: str,
+        question: str,
+        *,
+        context: str = "",
+        history: list[tuple[str, str]] | None = None,
+    ) -> tuple[str, Any]:
+        url = "https://router.huggingface.co/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        messages: list[dict[str, str]] = [
+            {
+                "role": "system",
+                "content": (
+                    "Você é um assistente de trading para XAUUSD em português do Brasil. "
+                    "Responda de forma objetiva, prática e segura. "
+                    "Não invente resultados; se faltar dado, diga que não tem informação suficiente."
+                ),
+            }
+        ]
+        if context.strip():
+            messages.append({"role": "system", "content": f"Contexto atual do robô:\n{context.strip()}"})
+        if history:
+            for role, text in history[-6:]:
+                messages.append({"role": "user" if role == "user" else "assistant", "content": text})
+        messages.append({"role": "user", "content": question.strip()})
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.3,
+            "max_tokens": 220,
+            "stream": False,
+        }
+        resp = requests.post(url, headers=headers, json=payload, timeout=self.timeout_seconds)
+        if resp.status_code == 404:
+            raise FileNotFoundError(f"Model or provider unavailable for {self.model}")
+        resp.raise_for_status()
+        data = resp.json()
+        answer = ""
+        if isinstance(data, dict):
+            choices = data.get("choices") or []
+            if choices and isinstance(choices, list):
+                first = choices[0] or {}
+                message = first.get("message") or {}
+                if isinstance(message, dict):
+                    answer = str(message.get("content") or "").strip()
+                if not answer:
+                    answer = str(first.get("text") or "").strip()
+        return answer, data
+
+    def _text_generation(self, prompt: str) -> dict[str, Any]:
+        url = f"https://api-inference.huggingface.co/models/{self.model}"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        payload = {
+            "inputs": prompt,
+            "parameters": {
+                "max_new_tokens": 220,
+                "temperature": 0.3,
+                "return_full_text": False,
+                "do_sample": True,
+            },
+            "options": {"wait_for_model": True},
+        }
+        resp = requests.post(url, headers=headers, json=payload, timeout=self.timeout_seconds)
+        if resp.status_code == 404:
+            raise FileNotFoundError(f"Model not available on api-inference for {self.model}")
+        resp.raise_for_status()
+        return resp.json()
+
+    def score_context(self, prompt: str) -> dict[str, Any]:
+        if not self.available():
+            return {
+                "score": 0.5,
+                "summary": "AI layer disabled; falling back to deterministic logic.",
+            }
+
+        try:
+            data = self._text_generation(prompt)
+            return {
+                "score": 0.7,
+                "summary": data if isinstance(data, str) else str(data)[:2000],
+            }
+        except Exception as exc:
+            return {
+                "score": 0.5,
+                "summary": f"AI call failed: {exc}",
+            }
+
+    def chat(
+        self,
+        question: str,
+        *,
+        context: str = "",
+        history: list[tuple[str, str]] | None = None,
+    ) -> dict[str, Any]:
+        if not self.available():
+            return {
+                "answer": "A camada de IA está desativada ou sem credenciais válidas.",
+                "raw": None,
+            }
+
+        try:
+            router_errors: list[str] = []
+            for model in self._candidate_models():
+                try:
+                    answer, data = self._router_chat(model, question, context=context, history=history)
+                    if answer.strip():
+                        return {"answer": answer.strip(), "raw": data, "backend": f"router:{model}"}
+                except Exception as exc:
+                    router_errors.append(f"{model}: {exc}")
+
+            prompt_parts = [
+                "Você é um assistente de trading para XAUUSD em português do Brasil.",
+                "Responda de forma objetiva, prática e segura.",
+                "Não invente resultados; se faltar dado, diga que não tem informação suficiente.",
+            ]
+            if context.strip():
+                prompt_parts.append("Contexto atual do robô:")
+                prompt_parts.append(context.strip())
+            if history:
+                prompt_parts.append("Histórico recente da conversa:")
+                for role, text in history[-6:]:
+                    prompt_parts.append(f"{role}: {text}")
+            prompt_parts.append(f"Pergunta: {question.strip()}")
+            prompt_parts.append("Resposta:")
+            prompt = "\n".join(prompt_parts)
+            data = self._text_generation(prompt)
+            answer = ""
+            if isinstance(data, list) and data:
+                first = data[0]
+                if isinstance(first, dict):
+                    answer = str(first.get("generated_text") or first.get("summary_text") or "")
+            elif isinstance(data, dict):
+                answer = str(data.get("generated_text") or data.get("summary_text") or data)
+            if not answer.strip():
+                answer = str(data)[:2000]
+            return {"answer": answer.strip(), "raw": data, "backend": f"text-generation:{self.model}"}
+        except Exception as exc:
+            detail = f"{exc}"
+            return {"answer": f"Falha ao consultar a IA: {detail}", "raw": None, "backend": "error"}
+</file>
+
+<file path="src/xauusd_ia_trader/notifier.py">
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Callable, Protocol
+
+
+def resolve_common_files_dir() -> Path:
+    override = os.getenv("MT5_COMMON_FILES_DIR", "").strip()
+    if override:
+        return Path(override)
+    appdata = os.getenv("APPDATA", "").strip()
+    if appdata:
+        return Path(appdata) / "MetaQuotes" / "Terminal" / "Common" / "Files"
+    return Path.cwd() / "runtime"
+
+
+@dataclass(slots=True)
+class NotificationEvent:
+    title: str
+    message: str
+    priority: int = 1
+    symbol: str | None = None
+    kind: str = "info"
+    created_at: str = ""
+
+    def to_json(self) -> str:
+        if not self.created_at:
+            self.created_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+        return json.dumps(
+            {
+                "title": self.title,
+                "message": self.message,
+                "priority": self.priority,
+                "symbol": self.symbol,
+                "kind": self.kind,
+                "created_at": self.created_at,
+            },
+            ensure_ascii=True,
+        )
+
+    def to_line(self) -> str:
+        if not self.created_at:
+            self.created_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+        return (
+            f"[{self.created_at}] "
+            f"P{self.priority} "
+            f"{self.kind.upper()} "
+            f"{self.title} | {self.message}"
+        )
+
+
+class NotificationSink(Protocol):
+    def emit(self, event: NotificationEvent) -> None: ...
+
+
+class ConsoleSink:
+    def emit(self, event: NotificationEvent) -> None:
+        print(f"[{event.kind.upper()}] {event.title} | {event.message}")
+
+
+class CallbackSink:
+    def __init__(self, callback: Callable[[NotificationEvent], None]):
+        self.callback = callback
+
+    def emit(self, event: NotificationEvent) -> None:
+        self.callback(event)
+
+
+class MT5QueueSink:
+    def __init__(self, queue_file: str):
+        base_dir = resolve_common_files_dir()
+        base_dir.mkdir(parents=True, exist_ok=True)
+        self.path = Path(queue_file)
+        if not self.path.is_absolute():
+            self.path = base_dir / queue_file
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
+    def emit(self, event: NotificationEvent) -> None:
+        with self.path.open("a", encoding="cp1252", errors="replace", newline="\n") as handle:
+            handle.write(event.to_line() + "\n")
+
+
+class NotificationBus:
+    def __init__(self, sinks: list[NotificationSink] | None = None, *, min_priority: int = 1):
+        self.sinks = sinks or []
+        self.min_priority = min_priority
+
+    def publish(self, event: NotificationEvent) -> None:
+        if event.priority < self.min_priority:
+            return
+        for sink in self.sinks:
+            sink.emit(event)
+
+    def info(self, title: str, message: str, *, symbol: str | None = None, priority: int = 1) -> None:
+        self.publish(NotificationEvent(title=title, message=message, priority=priority, symbol=symbol, kind="info"))
+
+    def warn(self, title: str, message: str, *, symbol: str | None = None, priority: int = 2) -> None:
+        self.publish(NotificationEvent(title=title, message=message, priority=priority, symbol=symbol, kind="warn"))
+
+    def error(self, title: str, message: str, *, symbol: str | None = None, priority: int = 0) -> None:
+        self.publish(NotificationEvent(title=title, message=message, priority=priority, symbol=symbol, kind="error"))
+</file>
+
+<file path="src/xauusd_ia_trader/execution.py">
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from dataclasses import dataclass
+from typing import Any
+
+from .broker import MT5Broker
+from .models import OrderResult, PositionLifecycle, PositionView, RiskDecision, TradeIdea
+from .notifier import NotificationBus
+from .state_store import PositionStateStore
+from .risk import RiskManager
+
+
+@dataclass
+class ExecutionEngine:
+    broker: MT5Broker
+    risk: RiskManager
+    notifier: NotificationBus
+    magic: int
+    state_store: PositionStateStore | None = None
+    deviation: int = 20
+    paper_mode: bool = True
+
+    def __post_init__(self) -> None:
+        if self.state_store is None:
+            self.state_store = PositionStateStore()
+
+    def _now(self) -> str:
+        return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+    def _make_lifecycle(
+        self,
+        *,
+        ticket: int,
+        idea: TradeIdea,
+        volume: float,
+    ) -> PositionLifecycle:
+        timestamp = self._now()
+        return PositionLifecycle(
+            ticket=int(ticket),
+            symbol=idea.symbol,
+            side=idea.side,
+            initial_volume=float(volume),
+            remaining_volume=float(volume),
+            price_open=float(idea.entry_price),
+            stop_loss=float(idea.stop_loss),
+            take_profit=float(idea.take_profit),
+            created_at=timestamp,
+            updated_at=timestamp,
+            regime=idea.regime,
+            reason=idea.reason,
+        )
+
+    def _position_from_payload(self, payload: dict[str, Any]) -> PositionView | None:
+        try:
+            ticket = int(payload.get("ticket") or payload.get("identifier") or 0)
+            side = "buy" if int(payload.get("type", 0)) == 0 else "sell"
+            symbol = str(payload.get("symbol") or "")
+            volume = float(payload.get("volume") or 0.0)
+            price_open = float(payload.get("price_open") or payload.get("price") or 0.0)
+            stop_loss = float(payload.get("sl") or 0.0)
+            take_profit = float(payload.get("tp") or 0.0)
+            current_price = float(payload.get("price_current") or payload.get("price_open") or 0.0)
+            profit = float(payload.get("profit") or 0.0)
+            magic = int(payload.get("magic") or 0)
+            comment = str(payload.get("comment") or "")
+        except Exception:
+            return None
+        return PositionView(
+            ticket=ticket,
+            symbol=symbol,
+            side=side,
+            volume=volume,
+            price_open=price_open,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+            current_price=current_price,
+            profit=profit,
+            magic=magic,
+            comment=comment,
+        )
+
+    def _paper_ticket(self) -> int:
+        return int(datetime.now(UTC).timestamp() * 1000)
+
+    def place_trade(
+        self,
+        idea: TradeIdea,
+        *,
+        equity: float,
+        spread_points: float,
+    ) -> tuple[RiskDecision, OrderResult | None]:
+        info = self.broker.symbol_info(idea.symbol)
+        decision = self.risk.validate(
+            idea,
+            equity=equity,
+            spread_points=spread_points,
+            symbol_info=info,
+        )
+        if not decision.approved:
+            self.notifier.warn("Trade blocked", f"{idea.symbol} | {decision.reason}", symbol=idea.symbol, priority=2)
+            return decision, None
+
+        self.notifier.info(
+            "Trade approved",
+            f"{idea.symbol} {idea.side.upper()} | lot={decision.lots:.2f} | SL={idea.stop_loss:.2f} | TP={idea.take_profit:.2f}",
+            symbol=idea.symbol,
+            priority=1,
+        )
+
+        if self.paper_mode:
+            ticket = self._paper_ticket()
+            lifecycle = self._make_lifecycle(ticket=ticket, idea=idea, volume=decision.lots)
+            self.state_store.upsert(lifecycle)
+            self.notifier.info(
+                "Paper trade created",
+                f"{idea.symbol} {idea.side.upper()} | ticket={ticket}",
+                symbol=idea.symbol,
+                priority=1,
+            )
+            return decision, OrderResult(
+                success=True,
+                message="paper trade simulated",
+                ticket=ticket,
+                raw={
+                    "symbol": idea.symbol,
+                    "side": idea.side,
+                    "lots": decision.lots,
+                    "entry": idea.entry_price,
+                },
+            )
+
+        if idea.entry_mode == "pending":
+            result = self.broker.send_pending_order(
+                symbol=idea.symbol,
+                side=idea.side,
+                lots=decision.lots,
+                entry=idea.entry_price,
+                sl=idea.stop_loss,
+                tp=idea.take_profit,
+                magic=self.magic,
+                deviation=self.deviation,
+                comment=idea.reason,
+            )
+        else:
+            result = self.broker.send_market_order(
+                symbol=idea.symbol,
+                side=idea.side,
+                lots=decision.lots,
+                sl=idea.stop_loss,
+                tp=idea.take_profit,
+                magic=self.magic,
+                deviation=self.deviation,
+                comment=idea.reason,
+            )
+
+        ok = bool(result.get("success"))
+        ticket = result.get("order") or result.get("ticket")
+        if ok and ticket is not None:
+            lifecycle = self._make_lifecycle(ticket=int(ticket), idea=idea, volume=decision.lots)
+            self.state_store.upsert(lifecycle)
+        self.notifier.info(
+            "Order sent" if ok else "Order rejected",
+            f"{idea.symbol} | retcode={result.get('retcode')} | message={result.get('comment') or result.get('message') or ''} | attempts={result.get('attempts')}",
+            symbol=idea.symbol,
+            priority=1 if ok else 0,
+        )
+        return decision, OrderResult(success=ok, message=str(result.get("comment") or result.get("message") or ""), ticket=ticket, raw=result)
+
+    def _query_positions(self, symbol: str) -> list[PositionView]:
+        if self.paper_mode:
+            return [
+                PositionView(
+                    ticket=item.ticket,
+                    symbol=item.symbol,
+                    side=item.side,
+                    volume=item.remaining_volume,
+                    price_open=item.price_open,
+                    stop_loss=item.stop_loss,
+                    take_profit=item.take_profit,
+                    current_price=item.price_open,
+                    profit=0.0,
+                    magic=self.magic,
+                    comment=item.reason,
+                )
+                for item in self.state_store.active_items(symbol)
+            ]
+        payloads = self.broker.positions_get(symbol=symbol, magic=self.magic)
+        positions: list[PositionView] = []
+        for payload in payloads:
+            view = self._position_from_payload(payload)
+            if view is not None:
+                positions.append(view)
+        return positions
+
+    def list_positions(self, symbol: str | None = None) -> list[PositionView]:
+        if symbol:
+            return self._query_positions(symbol)
+        if self.paper_mode:
+            return [
+                PositionView(
+                    ticket=item.ticket,
+                    symbol=item.symbol,
+                    side=item.side,
+                    volume=item.remaining_volume,
+                    price_open=item.price_open,
+                    stop_loss=item.stop_loss,
+                    take_profit=item.take_profit,
+                    current_price=item.price_open,
+                    profit=0.0,
+                    magic=self.magic,
+                    comment=item.reason,
+                )
+                for item in self.state_store.active_items()
+            ]
+        payloads = self.broker.positions_get(magic=self.magic)
+        positions: list[PositionView] = []
+        for payload in payloads:
+            view = self._position_from_payload(payload)
+            if view is not None and (symbol is None or view.symbol == symbol):
+                positions.append(view)
+        return positions
+
+    def close_single_position(
+        self,
+        *,
+        ticket: int,
+        symbol: str,
+        side: str,
+        volume: float,
+    ) -> dict[str, Any]:
+        if self.paper_mode:
+            item = self.state_store.get(ticket)
+            if item is None:
+                return {"success": False, "message": "paper position not found"}
+            remaining = max(0.0, float(item.remaining_volume) - float(volume))
+            if remaining <= 0:
+                self.state_store.remove(ticket)
+            else:
+                self.state_store.mark_action(ticket, remaining_volume=remaining)
+            self.notifier.info("Position closed", f"{symbol} | ticket={ticket} | volume={volume:.2f}", symbol=symbol, priority=1)
+            return {"success": True, "message": "paper position updated", "remaining_volume": remaining}
+        return self.broker.close_position(
+            ticket=ticket,
+            symbol=symbol,
+            side=side,
+            volume=volume,
+            magic=self.magic,
+            deviation=self.deviation,
+        )
+
+    def close_all_positions(self, symbol: str | None = None) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        positions = self.list_positions(symbol)
+        for position in positions:
+            result = self.close_single_position(
+                ticket=position.ticket,
+                symbol=position.symbol,
+                side=position.side,
+                volume=position.volume,
+            )
+            results.append({"ticket": position.ticket, **result})
+        return results
+
+    def partial_close_position(
+        self,
+        *,
+        ticket: int,
+        symbol: str,
+        side: str,
+        volume: float,
+        ratio: float = 0.5,
+    ) -> dict[str, Any]:
+        symbol_info = self.broker.symbol_info(symbol)
+        volume_step = float(symbol_info.get("volume_step") or 0.01)
+        volume_min = float(symbol_info.get("volume_min") or 0.01)
+        close_volume = max(volume_min, round(float(volume) * float(ratio) / volume_step) * volume_step)
+        close_volume = min(close_volume, float(volume))
+        if close_volume <= 0:
+            return {"success": False, "message": "close volume too small"}
+        return self.close_single_position(ticket=ticket, symbol=symbol, side=side, volume=close_volume)
+
+    def manage_positions(
+        self,
+        *,
+        symbol: str,
+        current_price: float,
+        atr: float,
+        spread_points: float,
+    ) -> list[dict[str, Any]]:
+        actions: list[dict[str, Any]] = []
+        if spread_points > float(self.risk.config.get("max_spread_points", 80)):
+            return actions
+
+        positions = self._query_positions(symbol)
+        if not positions:
+            return actions
+
+        breakeven_trigger = float(self.risk.config.get("breakeven_trigger_r", 0.9))
+        partial_trigger = float(self.risk.config.get("partial_take_profit_r", 1.0))
+        trailing_atr_mult = float(self.risk.config.get("trailing_atr_mult", 1.2))
+        trailing_step_points = float(self.risk.config.get("trailing_step_points", 10.0))
+        partial_ratio = float(self.risk.config.get("partial_close_ratio", 0.5))
+
+        symbol_info = self.broker.symbol_info(symbol)
+        volume_step = float(symbol_info.get("volume_step") or 0.01)
+        volume_min = float(symbol_info.get("volume_min") or 0.01)
+        point = float(symbol_info.get("point") or 0.01)
+        min_stop = float(symbol_info.get("trade_stops_level") or 0.0) * point
+
+        for position in positions:
+            state = self.state_store.get(position.ticket) if self.state_store else None
+            if state is None:
+                state = PositionLifecycle(
+                    ticket=position.ticket,
+                    symbol=position.symbol,
+                    side=position.side,
+                    initial_volume=position.volume,
+                    remaining_volume=position.volume,
+                    price_open=position.price_open,
+                    stop_loss=position.stop_loss,
+                    take_profit=position.take_profit,
+                    created_at=self._now(),
+                    updated_at=self._now(),
+                    regime="unknown",
+                    reason="recovered from broker",
+                )
+                self.state_store.upsert(state)
+
+            risk_per_unit = max(abs(state.price_open - state.stop_loss), point)
+            profit_r = (current_price - state.price_open) / risk_per_unit if position.side == "buy" else (state.price_open - current_price) / risk_per_unit
+
+            if not state.breakeven_done and profit_r >= breakeven_trigger:
+                if position.side == "buy":
+                    new_sl = max(state.stop_loss, state.price_open)
+                    if min_stop:
+                        new_sl = max(new_sl, current_price - min_stop)
+                else:
+                    new_sl = min(state.stop_loss, state.price_open)
+                    if min_stop:
+                        new_sl = min(new_sl, current_price + min_stop)
+                if self.paper_mode:
+                    self.state_store.mark_action(position.ticket, breakeven_done=True, stop_loss=new_sl)
+                    self.notifier.info("Breakeven moved", f"{symbol} | ticket={position.ticket} | SL={new_sl:.2f}", symbol=symbol, priority=1)
+                    actions.append({"ticket": position.ticket, "action": "breakeven", "stop_loss": new_sl})
+                else:
+                    result = self.broker.modify_position(ticket=position.ticket, symbol=symbol, sl=new_sl, tp=state.take_profit)
+                    if result.get("success"):
+                        self.state_store.mark_action(position.ticket, breakeven_done=True, stop_loss=new_sl)
+                        self.notifier.info("Breakeven moved", f"{symbol} | ticket={position.ticket} | SL={new_sl:.2f}", symbol=symbol, priority=1)
+                        actions.append({"ticket": position.ticket, "action": "breakeven", "stop_loss": new_sl, "result": result})
+
+            if not state.partial_done and profit_r >= partial_trigger and position.volume > volume_min:
+                close_volume = max(volume_min, round(position.volume * partial_ratio / volume_step) * volume_step)
+                close_volume = min(close_volume, position.volume - volume_min) if position.volume > volume_min else position.volume
+                if close_volume >= volume_min:
+                    if self.paper_mode:
+                        remaining = max(0.0, position.volume - close_volume)
+                        self.state_store.mark_action(position.ticket, partial_done=True, remaining_volume=remaining)
+                        self.notifier.info("Partial taken", f"{symbol} | ticket={position.ticket} | close={close_volume:.2f}", symbol=symbol, priority=1)
+                        actions.append({"ticket": position.ticket, "action": "partial", "close_volume": close_volume})
+                    else:
+                        result = self.broker.close_position(
+                            ticket=position.ticket,
+                            symbol=symbol,
+                            side=position.side,
+                            volume=close_volume,
+                            magic=self.magic,
+                            deviation=self.deviation,
+                        )
+                        if result.get("success"):
+                            remaining = max(0.0, position.volume - close_volume)
+                            self.state_store.mark_action(position.ticket, partial_done=True, remaining_volume=remaining)
+                            self.notifier.info("Partial taken", f"{symbol} | ticket={position.ticket} | close={close_volume:.2f}", symbol=symbol, priority=1)
+                            actions.append({"ticket": position.ticket, "action": "partial", "close_volume": close_volume, "result": result})
+
+            if profit_r >= float(self.risk.config.get("trailing_start_r", 1.2)):
+                if position.side == "buy":
+                    trail_sl = max(state.stop_loss, current_price - max(atr * trailing_atr_mult, trailing_step_points * point))
+                    if trail_sl > state.stop_loss:
+                        if self.paper_mode:
+                            self.state_store.mark_action(position.ticket, trailing_done=True, stop_loss=trail_sl)
+                            self.notifier.info("Trailing stop", f"{symbol} | ticket={position.ticket} | SL={trail_sl:.2f}", symbol=symbol, priority=1)
+                            actions.append({"ticket": position.ticket, "action": "trail", "stop_loss": trail_sl})
+                        else:
+                            result = self.broker.modify_position(ticket=position.ticket, symbol=symbol, sl=trail_sl, tp=state.take_profit)
+                            if result.get("success"):
+                                self.state_store.mark_action(position.ticket, trailing_done=True, stop_loss=trail_sl)
+                                self.notifier.info("Trailing stop", f"{symbol} | ticket={position.ticket} | SL={trail_sl:.2f}", symbol=symbol, priority=1)
+                                actions.append({"ticket": position.ticket, "action": "trail", "stop_loss": trail_sl, "result": result})
+                else:
+                    trail_sl = min(state.stop_loss, current_price + max(atr * trailing_atr_mult, trailing_step_points * point))
+                    if trail_sl < state.stop_loss:
+                        if self.paper_mode:
+                            self.state_store.mark_action(position.ticket, trailing_done=True, stop_loss=trail_sl)
+                            self.notifier.info("Trailing stop", f"{symbol} | ticket={position.ticket} | SL={trail_sl:.2f}", symbol=symbol, priority=1)
+                            actions.append({"ticket": position.ticket, "action": "trail", "stop_loss": trail_sl})
+                        else:
+                            result = self.broker.modify_position(ticket=position.ticket, symbol=symbol, sl=trail_sl, tp=state.take_profit)
+                            if result.get("success"):
+                                self.state_store.mark_action(position.ticket, trailing_done=True, stop_loss=trail_sl)
+                                self.notifier.info("Trailing stop", f"{symbol} | ticket={position.ticket} | SL={trail_sl:.2f}", symbol=symbol, priority=1)
+                                actions.append({"ticket": position.ticket, "action": "trail", "stop_loss": trail_sl, "result": result})
+
+        return actions
+</file>
+
+<file path="src/xauusd_ia_trader/gui.py">
+from __future__ import annotations
+
+import queue
+import threading
+import time
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+
+import yaml
+
+from .config import load_config
+from .indicators import add_features
+from .models import TradeIdea
+from .notifier import CallbackSink, NotificationEvent
+from .trader import XAUUSDAutonomousTrader
+
+
+def _now_text() -> str:
+    return datetime.now(UTC).strftime("%H:%M:%S")
+
+
+def _to_float(value: str, default: float = 0.0) -> float:
+    try:
+        return float(str(value).replace(",", ".").strip())
+    except Exception:
+        return default
+
+
+def _to_int(value: str, default: int = 0) -> int:
+    try:
+        return int(float(str(value).strip()))
+    except Exception:
+        return default
+
+
+class ScrollableFrame(ttk.Frame):
+    def __init__(self, master: tk.Widget, **kwargs: Any) -> None:
+        super().__init__(master, **kwargs)
+        self.canvas = tk.Canvas(self, highlightthickness=0, bd=0, bg="#0b1220")
+        self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.inner = ttk.Frame(self.canvas, style="Card.TFrame")
+        self.window_id = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
+        self.inner.bind("<Configure>", lambda _event: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.canvas.bind("<Configure>", lambda event: self.canvas.itemconfigure(self.window_id, width=event.width))
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+
+
+class XAUUSDControlPanel:
+    def __init__(self, config_path: Path) -> None:
+        self.config_path = config_path
+        self.config = load_config(config_path)
+
+        self.root = tk.Tk()
+        self.root.title("XAUUSD IA Trader")
+        self.root.geometry("1540x980")
+        self.root.minsize(1360, 860)
+        self.root.configure(bg="#0b1220")
+
+        self._lock = threading.Lock()
+        self._auto_running = False
+        self._auto_thread: threading.Thread | None = None
+        self._event_queue: queue.Queue[NotificationEvent] = queue.Queue()
+        self._status_queue: queue.Queue[str] = queue.Queue()
+        self.chat_history: list[tuple[str, str]] = []
+        self.toast_var = tk.StringVar(value="")
+        self.toast_window: tk.Toplevel | None = None
+
+        self._build_style()
+        self._build_vars()
+        self.trader = self._build_trader()
+        self._build_layout()
+        self._bind_shortcuts()
+        self._refresh_all()
+        self.root.after(250, self._poll_queues)
+        self.root.after(1000, self._tick)
+
+    def _build_style(self) -> None:
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        style.configure(".", font=("Segoe UI", 10))
+        style.configure("App.TFrame", background="#0b1220")
+        style.configure("Card.TFrame", background="#111827")
+        style.configure("Dark.TLabelframe", background="#111827", foreground="#e5e7eb")
+        style.configure("Dark.TLabelframe.Label", background="#111827", foreground="#93c5fd", font=("Segoe UI Semibold", 10))
+        style.configure("Dark.TLabel", background="#111827", foreground="#e5e7eb")
+        style.configure("Title.TLabel", background="#0b1220", foreground="#f8fafc", font=("Segoe UI Semibold", 18))
+        style.configure("Subtitle.TLabel", background="#0b1220", foreground="#94a3b8", font=("Segoe UI", 10))
+        style.configure("MetricTitle.TLabel", background="#111827", foreground="#94a3b8", font=("Segoe UI", 9))
+        style.configure("MetricValue.TLabel", background="#111827", foreground="#f8fafc", font=("Segoe UI Semibold", 18))
+        style.configure("Section.TLabel", background="#0b1220", foreground="#cbd5e1", font=("Segoe UI Semibold", 12))
+        style.configure("Accent.TButton", padding=(12, 8), background="#2563eb", foreground="white")
+        style.map("Accent.TButton", background=[("active", "#1d4ed8")])
+        style.configure("Danger.TButton", padding=(12, 8), background="#b91c1c", foreground="white")
+        style.map("Danger.TButton", background=[("active", "#991b1b")])
+        style.configure("Success.TButton", padding=(12, 8), background="#15803d", foreground="white")
+        style.map("Success.TButton", background=[("active", "#166534")])
+        style.configure("Info.TButton", padding=(12, 8), background="#0f766e", foreground="white")
+        style.map("Info.TButton", background=[("active", "#115e59")])
+        style.configure(
+            "Dark.TEntry",
+            fieldbackground="#0f172a",
+            background="#0f172a",
+            foreground="#f8fafc",
+            insertcolor="#f8fafc",
+        )
+        style.configure(
+            "Dark.TCombobox",
+            fieldbackground="#111827",
+            background="#111827",
+            foreground="#f8fafc",
+            selectforeground="#f8fafc",
+            selectbackground="#2563eb",
+            arrowcolor="#e5e7eb",
+        )
+        style.map(
+            "Dark.TCombobox",
+            fieldbackground=[("readonly", "#111827"), ("active", "#111827")],
+            background=[("readonly", "#111827"), ("active", "#111827")],
+            foreground=[("readonly", "#f8fafc"), ("active", "#f8fafc")],
+        )
+        self.root.option_add("*TCombobox*Listbox.background", "#111827")
+        self.root.option_add("*TCombobox*Listbox.foreground", "#f8fafc")
+        self.root.option_add("*TCombobox*Listbox.selectBackground", "#2563eb")
+        self.root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
+
+    def _build_vars(self) -> None:
+        app = self.config.get("app", {})
+        broker = self.config.get("broker", {})
+        risk = self.config.get("risk", {})
+        ai = self.config.get("ai", {})
+        notifications = self.config.get("notifications", {})
+
+        self.symbol_var = tk.StringVar(value=str(app.get("symbol", "XAUUSD")))
+        self.mode_var = tk.StringVar(value=str(app.get("mode", "live")).lower())
+        self.cycle_var = tk.StringVar(value=str(app.get("cycle_seconds", 30)))
+        self.position_state_var = tk.StringVar(value=str(app.get("position_state_path", "runtime/position_state.json")))
+
+        self.terminal_path_var = tk.StringVar(value=str(broker.get("terminal_path", "")))
+        self.login_var = tk.StringVar(value=str(broker.get("login", "")))
+        self.password_var = tk.StringVar(value=str(broker.get("password", "")))
+        self.server_var = tk.StringVar(value=str(broker.get("server", "")))
+        self.deviation_var = tk.StringVar(value=str(broker.get("deviation", 20)))
+        self.magic_var = tk.StringVar(value=str(broker.get("magic", 2401001)))
+
+        self.risk_var = tk.StringVar(value=f"{float(risk.get('risk_per_trade', 0.005)) * 100:.2f}")
+        self.daily_loss_var = tk.StringVar(value=f"{float(risk.get('daily_loss_limit', 0.02)) * 100:.2f}")
+        self.max_consecutive_var = tk.StringVar(value=str(risk.get("max_consecutive_losses", 3)))
+        self.max_trades_var = tk.StringVar(value=str(risk.get("max_trades_per_day", 5)))
+        self.max_open_var = tk.StringVar(value=str(risk.get("max_open_positions", 1)))
+        self.max_spread_var = tk.StringVar(value=str(risk.get("max_spread_points", 80)))
+        self.session_start_var = tk.StringVar(value=str(risk.get("session_start", "07:00")))
+        self.session_end_var = tk.StringVar(value=str(risk.get("session_end", "20:30")))
+        self.be_var = tk.StringVar(value=str(risk.get("breakeven_trigger_r", 0.9)))
+        self.partial_var = tk.StringVar(value=str(risk.get("partial_take_profit_r", 1.0)))
+        self.final_tp_var = tk.StringVar(value=str(risk.get("final_take_profit_r", 2.0)))
+        self.partial_ratio_var = tk.StringVar(value=str(risk.get("partial_close_ratio", 0.5)))
+        self.trailing_start_var = tk.StringVar(value=str(risk.get("trailing_start_r", 1.2)))
+        self.trailing_atr_var = tk.StringVar(value=str(risk.get("trailing_atr_mult", 1.2)))
+        self.trailing_step_var = tk.StringVar(value=str(risk.get("trailing_step_points", 10.0)))
+        self.min_rr_var = tk.StringVar(value=str(risk.get("min_rr", 1.2)))
+
+        self.ai_enabled_var = tk.BooleanVar(value=bool(ai.get("enabled", False)))
+        self.ai_model_var = tk.StringVar(value=str(ai.get("hf_model", "")))
+        self.queue_file_var = tk.StringVar(value=str(notifications.get("queue_file", "xauusd_push_queue.txt")))
+
+        self.side_var = tk.StringVar(value="buy")
+        self.manual_volume_var = tk.StringVar(value="")
+        self.manual_auto_sl_var = tk.StringVar(value="-")
+        self.manual_auto_tp_var = tk.StringVar(value="-")
+        self.manual_lot_preview_var = tk.StringVar(value="Lote sugerido: -")
+        self.current_price_var = tk.StringVar(value="-")
+        self.spread_var = tk.StringVar(value="-")
+
+        self.account_balance_var = tk.StringVar(value="-")
+        self.account_equity_var = tk.StringVar(value="-")
+        self.account_free_margin_var = tk.StringVar(value="-")
+        self.account_margin_level_var = tk.StringVar(value="-")
+        self.daily_pnl_var = tk.StringVar(value="-")
+        self.open_pnl_var = tk.StringVar(value="-")
+        self.open_positions_var = tk.StringVar(value="-")
+        self.trades_today_var = tk.StringVar(value="-")
+        self.session_status_var = tk.StringVar(value="-")
+        self.lock_status_var = tk.StringVar(value="-")
+        self.mode_status_var = tk.StringVar(value="Live" if self.mode_var.get() == "live" else "Paper")
+        self.connection_var = tk.StringVar(value="Desconectado")
+        self.status_var = tk.StringVar(value="Pronto para operar")
+        self.last_result_var = tk.StringVar(value="Pronto")
+        self.regime_var = tk.StringVar(value="-")
+
+        self.metric_vars: dict[str, tk.StringVar] = {}
+        self.chat_status_var = tk.StringVar(value="IA pronta")
+        self.chat_question_var = tk.StringVar(value="")
+
+    def _build_trader(self) -> XAUUSDAutonomousTrader:
+        trader = XAUUSDAutonomousTrader(self.config)
+        trader.notifier.sinks.append(CallbackSink(self._handle_notification))
+        return trader
+
+    def _build_layout(self) -> None:
+        outer = ttk.Frame(self.root, style="App.TFrame", padding=16)
+        outer.pack(fill="both", expand=True)
+
+        header = ttk.Frame(outer, style="App.TFrame")
+        header.pack(fill="x", pady=(0, 12))
+        ttk.Label(header, text="XAUUSD IA Trader", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(
+            header,
+            text="Painel operacional com controle manual, automação, risco, posições, IA e logs em tempo real.",
+            style="Subtitle.TLabel",
+        ).pack(anchor="w", pady=(4, 0))
+
+        toolbar = ttk.Frame(outer, style="App.TFrame")
+        toolbar.pack(fill="x", pady=(0, 12))
+        for label, command, style_name in [
+            ("Aplicar", self._apply_settings, "Accent.TButton"),
+            ("Iniciar Auto", self._start_auto, "Success.TButton"),
+            ("Parar Auto", self._stop_auto, "Danger.TButton"),
+            ("Atualizar", self._refresh_now, "Info.TButton"),
+            ("Fechar Todas", self._close_all_positions, "Danger.TButton"),
+        ]:
+            ttk.Button(toolbar, text=label, command=command, style=style_name).pack(side="left", padx=(0, 10))
+        ttk.Label(toolbar, textvariable=self.status_var, style="Section.TLabel").pack(side="right")
+        self.toast_label = ttk.Label(outer, textvariable=self.toast_var, style="Subtitle.TLabel")
+        self.toast_label.pack(fill="x", pady=(0, 8))
+
+        metrics = ttk.Frame(outer, style="App.TFrame")
+        metrics.pack(fill="x", pady=(0, 14))
+        cards = [
+            ("balance", "Saldo"),
+            ("equity", "Capital líquido"),
+            ("free_margin", "Margem livre"),
+            ("daily_pnl", "PnL do dia"),
+            ("open_pnl", "PnL aberto"),
+            ("open_positions", "Posições"),
+        ]
+        for idx, (key, title) in enumerate(cards):
+            card = ttk.Frame(metrics, style="Card.TFrame", padding=14)
+            card.grid(row=0, column=idx, padx=6, sticky="nsew")
+            metrics.columnconfigure(idx, weight=1)
+            ttk.Label(card, text=title, style="MetricTitle.TLabel").pack(anchor="w")
+            var = tk.StringVar(value="-")
+            self.metric_vars[key] = var
+            ttk.Label(card, textvariable=var, style="MetricValue.TLabel").pack(anchor="w", pady=(6, 0))
+
+        self.notebook = ttk.Notebook(outer)
+        self.notebook.pack(fill="both", expand=True)
+        self.dashboard_tab = ttk.Frame(self.notebook, style="App.TFrame")
+        self.manual_tab = ttk.Frame(self.notebook, style="App.TFrame")
+        self.positions_tab = ttk.Frame(self.notebook, style="App.TFrame")
+        self.settings_tab = ttk.Frame(self.notebook, style="App.TFrame")
+        self.ai_tab = ttk.Frame(self.notebook, style="App.TFrame")
+        self.logs_tab = ttk.Frame(self.notebook, style="App.TFrame")
+
+        self.notebook.add(self.dashboard_tab, text="Dashboard")
+        self.notebook.add(self.manual_tab, text="Manual")
+        self.notebook.add(self.positions_tab, text="Posições")
+        self.notebook.add(self.settings_tab, text="Config")
+        self.notebook.add(self.ai_tab, text="IA")
+        self.notebook.add(self.logs_tab, text="Logs")
+
+        self._build_dashboard_tab()
+        self._build_manual_tab()
+        self._build_positions_tab()
+        self._build_settings_tab()
+        self._build_ai_tab()
+        self._build_logs_tab()
+        self._build_status_bar(outer)
+
+    def _build_status_bar(self, parent: ttk.Frame) -> None:
+        bar = ttk.Frame(parent, style="Card.TFrame", padding=(12, 8))
+        bar.pack(fill="x", pady=(10, 0))
+        left = ttk.Frame(bar, style="Card.TFrame")
+        left.pack(side="left", fill="x", expand=True)
+        for label, var in [
+            ("Conexão", self.connection_var),
+            ("Modo", self.mode_status_var),
+            ("Regime", self.regime_var),
+            ("Sessão", self.session_status_var),
+            ("Bloqueio", self.lock_status_var),
+        ]:
+            box = ttk.Frame(left, style="Card.TFrame")
+            box.pack(side="left", padx=(0, 20))
+            ttk.Label(box, text=f"{label}:", style="MetricTitle.TLabel").pack(anchor="w")
+            ttk.Label(box, textvariable=var, style="Dark.TLabel").pack(anchor="w")
+        ttk.Label(bar, textvariable=self.last_result_var, style="Dark.TLabel").pack(side="right")
+
+    def _build_dashboard_tab(self) -> None:
+        outer = ttk.Frame(self.dashboard_tab, style="App.TFrame", padding=12)
+        outer.pack(fill="both", expand=True)
+
+        left = ttk.Frame(outer, style="App.TFrame")
+        left.pack(side="left", fill="both", expand=True)
+        right = ttk.Frame(outer, style="App.TFrame", width=360)
+        right.pack(side="right", fill="y", padx=(12, 0))
+
+        perf = ttk.LabelFrame(left, text="Performance", style="Dark.TLabelframe", padding=12)
+        perf.pack(fill="x", pady=(0, 12))
+        perf_grid = ttk.Frame(perf, style="Card.TFrame")
+        perf_grid.pack(fill="x")
+        perf_items = [
+            ("day_pnl", "Lucro do dia"),
+            ("open_pnl", "PnL aberto"),
+            ("trades_today", "Trades hoje"),
+            ("consecutive_losses", "Perdas seguidas"),
+            ("daily_limit", "Limite diário"),
+            ("risk_trade", "Risco por trade"),
+        ]
+        self.performance_vars: dict[str, tk.StringVar] = {}
+        for idx, (key, title) in enumerate(perf_items):
+            cell = ttk.Frame(perf_grid, style="Card.TFrame", padding=10)
+            cell.grid(row=idx // 3, column=idx % 3, padx=6, pady=6, sticky="nsew")
+            perf_grid.columnconfigure(idx % 3, weight=1)
+            ttk.Label(cell, text=title, style="MetricTitle.TLabel").pack(anchor="w")
+            var = tk.StringVar(value="-")
+            self.performance_vars[key] = var
+            ttk.Label(cell, textvariable=var, style="MetricValue.TLabel").pack(anchor="w", pady=(4, 0))
+
+        market = ttk.LabelFrame(left, text="Mercado e sessão", style="Dark.TLabelframe", padding=12)
+        market.pack(fill="x")
+        for label, var in [
+            ("Preço atual", self.current_price_var),
+            ("Spread atual", self.spread_var),
+            ("Posições abertas", self.open_positions_var),
+            ("Status da conta", self.connection_var),
+        ]:
+            row = ttk.Frame(market, style="Card.TFrame")
+            row.pack(fill="x", pady=4)
+            ttk.Label(row, text=label, style="MetricTitle.TLabel", width=18).pack(side="left")
+            ttk.Label(row, textvariable=var, style="Dark.TLabel").pack(side="left")
+
+        quick = ttk.LabelFrame(right, text="Ações rápidas", style="Dark.TLabelframe", padding=12)
+        quick.pack(fill="both", expand=True)
+        ttk.Label(
+            quick,
+            text="O botão Iniciar Auto mantém o ciclo contínuo; as travas de sessão e risco continuam valendo.",
+            style="Dark.TLabel",
+            wraplength=320,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 10))
+        ttk.Button(quick, text="Atualizar agora", command=self._refresh_now, style="Info.TButton").pack(fill="x", pady=4)
+        ttk.Button(quick, text="Abrir compra manual", command=lambda: self._manual_trade("buy"), style="Success.TButton").pack(fill="x", pady=4)
+        ttk.Button(quick, text="Abrir venda manual", command=lambda: self._manual_trade("sell"), style="Danger.TButton").pack(fill="x", pady=4)
+        ttk.Button(quick, text="Fechar todas", command=self._close_all_positions, style="Danger.TButton").pack(fill="x", pady=4)
+
+    def _build_manual_tab(self) -> None:
+        outer = ttk.Frame(self.manual_tab, style="App.TFrame", padding=12)
+        outer.pack(fill="both", expand=True)
+
+        left = ttk.LabelFrame(outer, text="Ordem manual", style="Dark.TLabelframe", padding=14)
+        left.pack(side="left", fill="both", expand=True)
+        right = ttk.LabelFrame(outer, text="Resumo", style="Dark.TLabelframe", padding=14)
+        right.pack(side="right", fill="y", padx=(12, 0))
+
+        rows: list[tuple[str, tk.Variable]] = [
+            ("Símbolo", self.symbol_var),
+            ("Lado", self.side_var),
+            ("Modo", self.mode_var),
+            ("Preço atual", self.current_price_var),
+            ("Lote manual", self.manual_volume_var),
+            ("SL automático", self.manual_auto_sl_var),
+            ("TP automático", self.manual_auto_tp_var),
+            ("Lote sugerido", self.manual_lot_preview_var),
+        ]
+
+        for idx, (label, var) in enumerate(rows):
+            row = ttk.Frame(left, style="Card.TFrame")
+            row.pack(fill="x", pady=5)
+            ttk.Label(row, text=label, style="MetricTitle.TLabel", width=18).pack(side="left")
+            if label == "Lado":
+                widget = ttk.Combobox(row, textvariable=var, values=["buy", "sell"], state="readonly", style="Dark.TCombobox")
+                widget.pack(side="left", fill="x", expand=True)
+            elif label == "Modo":
+                widget = ttk.Combobox(row, textvariable=var, values=["live", "paper"], state="readonly", style="Dark.TCombobox")
+                widget.pack(side="left", fill="x", expand=True)
+            elif label in {"Preço atual", "SL automático", "TP automático", "Lote sugerido"}:
+                entry = ttk.Entry(row, textvariable=var, style="Dark.TEntry", state="readonly")
+                entry.pack(side="left", fill="x", expand=True)
+            else:
+                entry = ttk.Entry(row, textvariable=var, style="Dark.TEntry")
+                entry.pack(side="left", fill="x", expand=True)
+
+        actions = ttk.Frame(left, style="Card.TFrame")
+        actions.pack(fill="x", pady=(14, 0))
+        ttk.Button(actions, text="Abrir Compra", command=lambda: self._manual_trade("buy"), style="Success.TButton").pack(side="left", padx=(0, 8))
+        ttk.Button(actions, text="Abrir Venda", command=lambda: self._manual_trade("sell"), style="Danger.TButton").pack(side="left", padx=(0, 8))
+        ttk.Button(actions, text="Atualizar preço", command=self._refresh_price_only, style="Info.TButton").pack(side="left")
+
+        ttk.Label(
+            left,
+            text="As ordens manuais são abertas a mercado com SL e TP automáticos em RR 1:1.",
+            style="Subtitle.TLabel",
+            wraplength=760,
+            justify="left",
+        ).pack(anchor="w", pady=(10, 0))
+
+        for label, var in [
+            ("Saldo", self.account_balance_var),
+            ("Equity", self.account_equity_var),
+            ("Margem livre", self.account_free_margin_var),
+            ("Margem %", self.account_margin_level_var),
+            ("PnL do dia", self.daily_pnl_var),
+            ("PnL aberto", self.open_pnl_var),
+            ("Trades hoje", self.trades_today_var),
+            ("Risco por trade", self.risk_var),
+        ]:
+            row = ttk.Frame(right, style="Card.TFrame")
+            row.pack(fill="x", pady=4)
+            ttk.Label(row, text=label, style="MetricTitle.TLabel", width=18).pack(side="left")
+            ttk.Label(row, textvariable=var, style="Dark.TLabel").pack(side="left")
+
+    def _build_positions_tab(self) -> None:
+        outer = ttk.Frame(self.positions_tab, style="App.TFrame", padding=12)
+        outer.pack(fill="both", expand=True)
+        header = ttk.Frame(outer, style="App.TFrame")
+        header.pack(fill="x", pady=(0, 10))
+        ttk.Label(header, text="Posições abertas", style="Section.TLabel").pack(side="left")
+        ttk.Button(header, text="Fechar Todas", command=self._close_all_positions, style="Danger.TButton").pack(side="right")
+        ttk.Button(header, text="Atualizar", command=self._refresh_now, style="Info.TButton").pack(side="right", padx=(0, 8))
+        self.positions_scroll = ScrollableFrame(outer)
+        self.positions_scroll.pack(fill="both", expand=True)
+
+    def _build_settings_tab(self) -> None:
+        outer = ttk.Frame(self.settings_tab, style="App.TFrame", padding=12)
+        outer.pack(fill="both", expand=True)
+
+        columns = ttk.Frame(outer, style="App.TFrame")
+        columns.pack(fill="both", expand=True)
+        left = ttk.LabelFrame(columns, text="Operação", style="Dark.TLabelframe", padding=14)
+        left.pack(side="left", fill="both", expand=True)
+        middle = ttk.LabelFrame(columns, text="Risco e sessão", style="Dark.TLabelframe", padding=14)
+        middle.pack(side="left", fill="both", expand=True, padx=12)
+        right = ttk.LabelFrame(columns, text="Conexão e IA", style="Dark.TLabelframe", padding=14)
+        right.pack(side="left", fill="both", expand=True)
+
+        self._settings_form(
+            left,
+            [
+                ("Símbolo", self.symbol_var),
+                ("Modo", self.mode_var),
+                ("Cycle seconds", self.cycle_var),
+                ("Position state", self.position_state_var),
+            ],
+        )
+        self._settings_form(
+            middle,
+            [
+                ("Risco por trade %", self.risk_var),
+                ("Limite diário %", self.daily_loss_var),
+                ("Máx. perdas seguidas", self.max_consecutive_var),
+                ("Máx. trades/dia", self.max_trades_var),
+                ("Máx. posições", self.max_open_var),
+                ("Spread máximo", self.max_spread_var),
+                ("Início sessão", self.session_start_var),
+                ("Fim sessão", self.session_end_var),
+                ("Break-even R", self.be_var),
+                ("Parcial R", self.partial_var),
+                ("TP final R", self.final_tp_var),
+                ("Parcial %", self.partial_ratio_var),
+                ("Trailing start R", self.trailing_start_var),
+                ("Trailing ATR mult", self.trailing_atr_var),
+                ("Trailing step pts", self.trailing_step_var),
+                ("RR mínimo", self.min_rr_var),
+            ],
+        )
+        self._settings_form(
+            right,
+            [
+                ("Terminal MT5", self.terminal_path_var),
+                ("Login", self.login_var),
+                ("Senha", self.password_var),
+                ("Servidor", self.server_var),
+                ("Desvio", self.deviation_var),
+                ("Magic", self.magic_var),
+                ("Arquivo fila", self.queue_file_var),
+                ("IA habilitada", self.ai_enabled_var),
+                ("Modelo HF", self.ai_model_var),
+            ],
+        )
+
+        bottom = ttk.Frame(outer, style="App.TFrame")
+        bottom.pack(fill="x", pady=(12, 0))
+        ttk.Button(bottom, text="Salvar e aplicar", command=self._apply_settings, style="Accent.TButton").pack(side="left")
+        ttk.Button(bottom, text="Carregar arquivo...", command=self._load_config_file_dialog, style="Info.TButton").pack(side="left", padx=(8, 0))
+
+    def _build_ai_tab(self) -> None:
+        outer = ttk.Frame(self.ai_tab, style="App.TFrame", padding=12)
+        outer.pack(fill="both", expand=True)
+
+        header = ttk.Frame(outer, style="App.TFrame")
+        header.pack(fill="x", pady=(0, 10))
+        ttk.Label(header, text="Chat da IA", style="Section.TLabel").pack(side="left")
+        ttk.Label(header, textvariable=self.chat_status_var, style="Subtitle.TLabel").pack(side="right")
+
+        body = ttk.Frame(outer, style="App.TFrame")
+        body.pack(fill="both", expand=True)
+        left = ttk.LabelFrame(body, text="Conversa", style="Dark.TLabelframe", padding=12)
+        left.pack(side="left", fill="both", expand=True)
+        right = ttk.LabelFrame(body, text="Atalhos", style="Dark.TLabelframe", padding=12)
+        right.pack(side="right", fill="y", padx=(12, 0))
+
+        self.chat_text = tk.Text(
+            left,
+            bg="#0f172a",
+            fg="#e5e7eb",
+            insertbackground="#e5e7eb",
+            relief="flat",
+            wrap="word",
+            height=24,
+            font=("Consolas", 10),
+        )
+        self.chat_text.pack(fill="both", expand=True)
+        self.chat_text.configure(state="disabled")
+
+        input_row = ttk.Frame(left, style="Card.TFrame")
+        input_row.pack(fill="x", pady=(10, 0))
+        entry = ttk.Entry(input_row, textvariable=self.chat_question_var, style="Dark.TEntry")
+        entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        entry.bind("<Return>", lambda _event: self._send_chat_question())
+        entry.bind("<KP_Enter>", lambda _event: self._send_chat_question())
+        ttk.Button(input_row, text="Enviar", command=self._send_chat_question, style="Accent.TButton").pack(side="left")
+        self.chat_input = entry
+        ttk.Button(input_row, text="Limpar conversa", command=self._clear_chat, style="Info.TButton").pack(side="left", padx=(8, 0))
+
+        for label, question in [
+            ("Resumo do robô", "Explique o estado atual do robô e os principais riscos."),
+            ("Estratégia", "Resuma a estratégia de entrada, saída e risco em linguagem simples."),
+            ("Posições", "Analise as posições abertas e diga o que está acontecendo."),
+        ]:
+            ttk.Button(right, text=label, command=lambda q=question: self._preset_chat_question(q), style="Info.TButton").pack(fill="x", pady=4)
+
+        ttk.Label(
+            right,
+            text="A IA responde perguntas sobre operação, estratégia e contexto atual do sistema.",
+            style="Subtitle.TLabel",
+            wraplength=260,
+            justify="left",
+        ).pack(anchor="w", pady=(10, 0))
+
+    def _build_logs_tab(self) -> None:
+        outer = ttk.Frame(self.logs_tab, style="App.TFrame", padding=12)
+        outer.pack(fill="both", expand=True)
+        header = ttk.Frame(outer, style="App.TFrame")
+        header.pack(fill="x", pady=(0, 8))
+        ttk.Label(header, text="Eventos e logs em tempo real", style="Section.TLabel").pack(side="left")
+        ttk.Button(header, text="Limpar", command=self._clear_logs, style="Info.TButton").pack(side="right")
+        self.log_text = tk.Text(
+            outer,
+            bg="#0f172a",
+            fg="#e5e7eb",
+            insertbackground="#e5e7eb",
+            relief="flat",
+            height=24,
+            wrap="word",
+            font=("Consolas", 10),
+        )
+        self.log_text.pack(fill="both", expand=True)
+        self.log_text.tag_configure("info", foreground="#cbd5e1")
+        self.log_text.tag_configure("warn", foreground="#fbbf24")
+        self.log_text.tag_configure("error", foreground="#f87171")
+        self.log_text.configure(state="disabled")
+
+    def _settings_form(self, parent: ttk.LabelFrame, fields: list[tuple[str, tk.Variable]]) -> None:
+        for label, var in fields:
+            row = ttk.Frame(parent, style="Card.TFrame")
+            row.pack(fill="x", pady=4)
+            ttk.Label(row, text=label, style="MetricTitle.TLabel", width=20).pack(side="left")
+            if isinstance(var, tk.BooleanVar):
+                ttk.Checkbutton(row, variable=var).pack(side="left", anchor="w")
+            elif label == "Modo":
+                ttk.Combobox(row, textvariable=var, values=["live", "paper"], state="readonly", style="Dark.TCombobox").pack(side="left", fill="x", expand=True)
+            else:
+                ttk.Entry(row, textvariable=var, style="Dark.TEntry").pack(side="left", fill="x", expand=True)
+
+    def _bind_shortcuts(self) -> None:
+        self.root.bind("<F5>", lambda _event: self._refresh_now())
+        self.root.bind("<F9>", lambda _event: self._manual_trade("buy"))
+        self.root.bind("<F10>", lambda _event: self._manual_trade("sell"))
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _handle_notification(self, event: NotificationEvent) -> None:
+        self._event_queue.put(event)
+
+    def _append_log(self, text: str, tag: str = "info") -> None:
+        self.log_text.configure(state="normal")
+        self.log_text.insert("end", text + "\n", tag)
+        self.log_text.see("end")
+        self.log_text.configure(state="disabled")
+
+    def _append_chat(self, role: str, text: str) -> None:
+        self.chat_text.configure(state="normal")
+        prefix = "Você" if role == "user" else "IA"
+        self.chat_text.insert("end", f"{prefix}: {text}\n\n")
+        self.chat_text.see("end")
+        self.chat_text.configure(state="disabled")
+
+    def _clear_chat(self) -> None:
+        self.chat_history.clear()
+        self.chat_text.configure(state="normal")
+        self.chat_text.delete("1.0", "end")
+        self.chat_text.configure(state="disabled")
+        self.chat_question_var.set("")
+        self.chat_status_var.set("IA pronta")
+        self._show_toast("Conversa limpa", kind="info")
+
+    def _clear_logs(self) -> None:
+        self.log_text.configure(state="normal")
+        self.log_text.delete("1.0", "end")
+        self.log_text.configure(state="disabled")
+
+    def _refresh_now(self) -> None:
+        self._refresh_all()
+        self._append_log(f"[{_now_text()}] atualização manual concluída", "info")
+
+    def _refresh_price_only(self) -> None:
+        self._update_market_data()
+        self._append_log(f"[{_now_text()}] preço atualizado", "info")
+
+    def _load_config_file_dialog(self) -> None:
+        selected = filedialog.askopenfilename(
+            title="Selecionar configuração",
+            filetypes=[("YAML", "*.yaml *.yml"), ("Todos os arquivos", "*.*")],
+            initialdir=str(self.config_path.parent),
+        )
+        if not selected:
+            return
+        self.config_path = Path(selected)
+        self.config = load_config(self.config_path)
+        self._set_vars_from_config()
+        self.trader = self._build_trader()
+        self._refresh_all()
+        self._append_log(f"[{_now_text()}] configuração carregada de {self.config_path}", "info")
+
+    def _set_vars_from_config(self) -> None:
+        app = self.config.get("app", {})
+        broker = self.config.get("broker", {})
+        risk = self.config.get("risk", {})
+        ai = self.config.get("ai", {})
+        notifications = self.config.get("notifications", {})
+
+        self.symbol_var.set(str(app.get("symbol", "XAUUSD")))
+        self.mode_var.set(str(app.get("mode", "live")).lower())
+        self.cycle_var.set(str(app.get("cycle_seconds", 30)))
+        self.position_state_var.set(str(app.get("position_state_path", "runtime/position_state.json")))
+
+        self.terminal_path_var.set(str(broker.get("terminal_path", "")))
+        self.login_var.set(str(broker.get("login", "")))
+        self.password_var.set(str(broker.get("password", "")))
+        self.server_var.set(str(broker.get("server", "")))
+        self.deviation_var.set(str(broker.get("deviation", 20)))
+        self.magic_var.set(str(broker.get("magic", 2401001)))
+
+        self.risk_var.set(f"{float(risk.get('risk_per_trade', 0.005)) * 100:.2f}")
+        self.daily_loss_var.set(f"{float(risk.get('daily_loss_limit', 0.02)) * 100:.2f}")
+        self.max_consecutive_var.set(str(risk.get("max_consecutive_losses", 3)))
+        self.max_trades_var.set(str(risk.get("max_trades_per_day", 5)))
+        self.max_open_var.set(str(risk.get("max_open_positions", 1)))
+        self.max_spread_var.set(str(risk.get("max_spread_points", 80)))
+        self.session_start_var.set(str(risk.get("session_start", "07:00")))
+        self.session_end_var.set(str(risk.get("session_end", "20:30")))
+        self.be_var.set(str(risk.get("breakeven_trigger_r", 0.9)))
+        self.partial_var.set(str(risk.get("partial_take_profit_r", 1.0)))
+        self.final_tp_var.set(str(risk.get("final_take_profit_r", 2.0)))
+        self.partial_ratio_var.set(str(risk.get("partial_close_ratio", 0.5)))
+        self.trailing_start_var.set(str(risk.get("trailing_start_r", 1.2)))
+        self.trailing_atr_var.set(str(risk.get("trailing_atr_mult", 1.2)))
+        self.trailing_step_var.set(str(risk.get("trailing_step_points", 10.0)))
+        self.min_rr_var.set(str(risk.get("min_rr", 1.2)))
+
+        self.ai_enabled_var.set(bool(ai.get("enabled", False)))
+        self.ai_model_var.set(str(ai.get("hf_model", "")))
+        self.queue_file_var.set(str(notifications.get("queue_file", "xauusd_push_queue.txt")))
+        self.mode_status_var.set("Live" if self.mode_var.get().lower() == "live" else "Paper")
+
+    def _collect_config_from_form(self) -> dict[str, Any]:
+        return {
+            "app": {
+                "symbol": self.symbol_var.get().strip() or "XAUUSD",
+                "timeframes": list(self.config.get("app", {}).get("timeframes", ["M1", "M5", "M15"])),
+                "mode": self.mode_var.get().strip().lower() or "live",
+                "cycle_seconds": max(1, _to_int(self.cycle_var.get(), 30)),
+                "position_state_path": self.position_state_var.get().strip() or "runtime/position_state.json",
+            },
+            "broker": {
+                "terminal_path": self.terminal_path_var.get().strip(),
+                "login": _to_int(self.login_var.get(), 0),
+                "password": self.password_var.get(),
+                "server": self.server_var.get().strip(),
+                "deviation": _to_int(self.deviation_var.get(), 20),
+                "magic": _to_int(self.magic_var.get(), 2401001),
+            },
+            "risk": {
+                "risk_per_trade": max(0.0, _to_float(self.risk_var.get(), 0.5) / 100.0),
+                "daily_loss_limit": max(0.0, _to_float(self.daily_loss_var.get(), 2.0) / 100.0),
+                "max_consecutive_losses": max(1, _to_int(self.max_consecutive_var.get(), 3)),
+                "max_trades_per_day": max(1, _to_int(self.max_trades_var.get(), 5)),
+                "max_open_positions": max(1, _to_int(self.max_open_var.get(), 1)),
+                "max_spread_points": max(1.0, _to_float(self.max_spread_var.get(), 80.0)),
+                "breakeven_trigger_r": max(0.1, _to_float(self.be_var.get(), 0.9)),
+                "partial_take_profit_r": max(0.1, _to_float(self.partial_var.get(), 1.0)),
+                "final_take_profit_r": max(0.1, _to_float(self.final_tp_var.get(), 2.0)),
+                "partial_close_ratio": min(1.0, max(0.1, _to_float(self.partial_ratio_var.get(), 0.5))),
+                "trailing_start_r": max(0.1, _to_float(self.trailing_start_var.get(), 1.2)),
+                "trailing_atr_mult": max(0.1, _to_float(self.trailing_atr_var.get(), 1.2)),
+                "trailing_step_points": max(0.1, _to_float(self.trailing_step_var.get(), 10.0)),
+                "min_rr": max(0.1, _to_float(self.min_rr_var.get(), 1.2)),
+                "session_start": self.session_start_var.get().strip() or "07:00",
+                "session_end": self.session_end_var.get().strip() or "20:30",
+            },
+            "strategy": dict(self.config.get("strategy", {})),
+            "ai": {
+                "enabled": bool(self.ai_enabled_var.get()),
+                "hf_model": self.ai_model_var.get().strip(),
+                "timeout_seconds": int(self.config.get("ai", {}).get("timeout_seconds", 12)),
+            },
+            "notifications": {
+                "enabled": True,
+                "queue_file": self.queue_file_var.get().strip() or "xauusd_push_queue.txt",
+                "min_priority": int(self.config.get("notifications", {}).get("min_priority", 1)),
+            },
+        }
+
+    def _persist_config(self) -> None:
+        self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.config_path.open("w", encoding="utf-8") as handle:
+            yaml.safe_dump(self.config, handle, sort_keys=False, allow_unicode=True)
+
+    def _apply_settings(self) -> None:
+        with self._lock:
+            self.config = self._collect_config_from_form()
+            self._persist_config()
+            self.trader = self._build_trader()
+        self.status_var.set("Configuração aplicada")
+        self._append_log(f"[{_now_text()}] configurações aplicadas e salvas", "info")
+        self._show_toast("Configurações salvas com sucesso", kind="success")
+        self._refresh_all()
+
+    def _update_market_data(self) -> None:
+        with self._lock:
+            trader = self.trader
+        if not trader.broker.connect():
+            self.connection_var.set("Desconectado")
+            self.status_var.set("Falha na conexão MT5")
+            return
+
+        symbol = self.symbol_var.get().strip() or "XAUUSD"
+        if not trader.broker.ensure_symbol(symbol):
+            self.connection_var.set("Símbolo indisponível")
+            return
+
+        try:
+            import MetaTrader5 as mt5  # type: ignore
+
+            tick = mt5.symbol_info_tick(symbol)
+        except Exception:
+            tick = None
+
+        if tick is not None:
+            price = float(tick.ask if self.side_var.get().lower() == "buy" else tick.bid)
+            self.current_price_var.set(f"{price:.2f}")
+            spread = trader.broker.current_spread_points(symbol)
+            self.spread_var.set(f"{spread:.1f} pts")
+        else:
+            self.current_price_var.set("-")
+            self.spread_var.set("-")
+
+    def _update_performance(self) -> None:
+        with self._lock:
+            trader = self.trader
+
+        symbol = self.symbol_var.get().strip() or "XAUUSD"
+        if not trader.broker.connect():
+            self.connection_var.set("Desconectado")
+            return
+
+        account = trader.broker.account_info()
+        balance = float(account.get("balance") or 0.0)
+        equity = float(account.get("equity") or balance)
+        free_margin = float(account.get("margin_free") or account.get("free_margin") or 0.0)
+        margin_level = float(account.get("margin_level") or 0.0)
+        positions = trader.engine.list_positions(symbol)
+        open_pnl = sum(float(pos.profit) for pos in positions)
+        daily_pnl = trader.risk.daily_pnl_from_equity(equity)
+        spread = trader.broker.current_spread_points(symbol)
+
+        self.metric_vars["balance"].set(f"{balance:,.2f}")
+        self.metric_vars["equity"].set(f"{equity:,.2f}")
+        self.metric_vars["free_margin"].set(f"{free_margin:,.2f}")
+        self.metric_vars["daily_pnl"].set(f"{daily_pnl:,.2f}")
+        self.metric_vars["open_pnl"].set(f"{open_pnl:,.2f}")
+        self.metric_vars["open_positions"].set(str(len(positions)))
+
+        self.account_balance_var.set(f"{balance:,.2f}")
+        self.account_equity_var.set(f"{equity:,.2f}")
+        self.account_free_margin_var.set(f"{free_margin:,.2f}")
+        self.account_margin_level_var.set(f"{margin_level:.1f}%")
+        self.daily_pnl_var.set(f"{daily_pnl:,.2f}")
+        self.open_pnl_var.set(f"{open_pnl:,.2f}")
+        self.open_positions_var.set(str(len(positions)))
+        self.trades_today_var.set(str(trader.risk.state.trades_today))
+        self.session_status_var.set("Ativa" if trader.risk.session_allowed() else "Fora da janela")
+        self.lock_status_var.set("Bloqueado" if trader.risk.state.locked else "Liberado")
+        self.mode_status_var.set("Live" if not trader.paper_mode else "Paper")
+        self.connection_var.set(f"Conectado | spread={spread:.1f} pts")
+
+        self.performance_vars["day_pnl"].set(f"{daily_pnl:,.2f}")
+        self.performance_vars["open_pnl"].set(f"{open_pnl:,.2f}")
+        self.performance_vars["trades_today"].set(str(trader.risk.state.trades_today))
+        self.performance_vars["consecutive_losses"].set(str(trader.risk.state.consecutive_losses))
+        self.performance_vars["daily_limit"].set(f"{float(trader.config['risk'].get('daily_loss_limit', 0.02)) * 100:.2f}%")
+        self.performance_vars["risk_trade"].set(f"{float(trader.config['risk'].get('risk_per_trade', 0.005)) * 100:.2f}%")
+
+        self._refresh_positions_list(positions)
+        self._update_manual_preview()
+
+    def _refresh_positions_list(self, positions: list[Any]) -> None:
+        for child in self.positions_scroll.inner.winfo_children():
+            child.destroy()
+
+        if not positions:
+            ttk.Label(self.positions_scroll.inner, text="Nenhuma posição aberta.", style="Subtitle.TLabel").pack(anchor="w", pady=8)
+            return
+
+        for position in positions:
+            card = ttk.Frame(self.positions_scroll.inner, style="Card.TFrame", padding=14)
+            card.pack(fill="x", pady=8)
+            top = ttk.Frame(card, style="Card.TFrame")
+            top.pack(fill="x")
+            ttk.Label(top, text=f"Ticket {position.ticket} | {position.symbol} | {position.side.upper()} | {position.volume:.2f} lot", style="Section.TLabel").pack(side="left")
+            ttk.Label(top, text=f"PnL {position.profit:,.2f}", style="Dark.TLabel").pack(side="right")
+
+            details = ttk.Frame(card, style="Card.TFrame")
+            details.pack(fill="x", pady=(8, 0))
+            fields = [
+                ("Entrada", f"{position.price_open:.2f}"),
+                ("Preço atual", f"{position.current_price:.2f}"),
+                ("SL", f"{position.stop_loss:.2f}"),
+                ("TP", f"{position.take_profit:.2f}"),
+                ("Magic", str(position.magic)),
+                ("Comentário", position.comment or "-"),
+            ]
+            for idx, (label, value) in enumerate(fields):
+                box = ttk.Frame(details, style="Card.TFrame")
+                box.grid(row=0, column=idx, padx=6, sticky="nsew")
+                details.columnconfigure(idx, weight=1)
+                ttk.Label(box, text=label, style="MetricTitle.TLabel").pack(anchor="w")
+                ttk.Label(box, text=value, style="Dark.TLabel").pack(anchor="w")
+
+            actions = ttk.Frame(card, style="Card.TFrame")
+            actions.pack(fill="x", pady=(10, 0))
+            ttk.Button(actions, text="Fechar", command=lambda p=position: self._close_position(p, p.volume), style="Danger.TButton").pack(side="left", padx=(0, 8))
+            ttk.Button(actions, text="Fechar 50%", command=lambda p=position: self._partial_close_position(p), style="Info.TButton").pack(side="left", padx=(0, 8))
+
+    def _update_manual_preview(self) -> None:
+        symbol = self.symbol_var.get().strip() or "XAUUSD"
+        price = _to_float(self.current_price_var.get(), 0.0)
+        volume = _to_float(self.manual_volume_var.get(), 0.0)
+        side = self.side_var.get().lower()
+        sl, tp = self._compute_manual_geometry(symbol, side, price)
+        self.manual_auto_sl_var.set(f"{sl:.2f}" if sl > 0 else "-")
+        self.manual_auto_tp_var.set(f"{tp:.2f}" if tp > 0 else "-")
+        if price <= 0 or sl <= 0:
+            self.manual_lot_preview_var.set("Lote sugerido: -")
+            return
+        with self._lock:
+            trader = self.trader
+        info = trader.broker.symbol_info(symbol)
+        equity = float(trader.broker.account_info().get("equity") or trader.broker.account_info().get("balance") or 0.0)
+        lots = trader.risk.calculate_lots(
+            equity=equity,
+            entry_price=price,
+            stop_loss=sl,
+            symbol_info=info,
+            manual_lots=volume if volume > 0 else None,
+        )
+        self.manual_lot_preview_var.set(f"Lote sugerido: {lots:.2f}")
+
+    def _refresh_all(self) -> None:
+        self._update_market_data()
+        self._update_performance()
+        self._update_session_snapshot()
+
+    def _update_session_snapshot(self) -> None:
+        with self._lock:
+            trader = self.trader
+        self.session_status_var.set("Ativa" if trader.risk.session_allowed() else "Fora da janela")
+        self.lock_status_var.set("Bloqueado" if trader.risk.state.locked else "Liberado")
+        self.mode_status_var.set("Live" if not trader.paper_mode else "Paper")
+
+    def _compute_manual_geometry(self, symbol: str, side: str, price: float) -> tuple[float, float]:
+        if price <= 0:
+            return 0.0, 0.0
+        with self._lock:
+            trader = self.trader
+        trader.broker.ensure_symbol(symbol)
+        info = trader.broker.symbol_info(symbol)
+        point = float(info.get("point") or 0.01)
+        digits = int(info.get("digits") or 2)
+        spread_points = trader.broker.current_spread_points(symbol)
+        rates = trader.broker.get_rates(symbol, "M5", 150)
+        atr = 0.0
+        if not rates.empty:
+            try:
+                enriched = add_features(rates)
+                atr = float(enriched.iloc[-1].get("atr_14", 0.0) or 0.0)
+            except Exception:
+                atr = 0.0
+        base_distance = max(atr * 0.75, spread_points * point * 2.0, point * 50)
+        if base_distance <= 0:
+            base_distance = max(price * 0.0005, point * 50)
+        if side == "buy":
+            return round(price - base_distance, digits), round(price + base_distance, digits)
+        return round(price + base_distance, digits), round(price - base_distance, digits)
+
+    def _manual_trade(self, side: str) -> None:
+        try:
+            with self._lock:
+                trader = self.trader
+            symbol = self.symbol_var.get().strip() or "XAUUSD"
+            if not trader.broker.connect():
+                messagebox.showerror("MT5", "Não foi possível conectar ao terminal MT5.")
+                return
+            trader.broker.ensure_symbol(symbol)
+            price = self._get_live_price(symbol, side)
+            if price <= 0:
+                messagebox.showerror("Preço", "Não foi possível obter o preço atual do símbolo.")
+                return
+            sl, tp = self._compute_manual_geometry(symbol, side, price)
+            if sl <= 0 or tp <= 0:
+                messagebox.showwarning("SL/TP", "Não foi possível calcular SL/TP automaticamente.")
+                return
+            volume = _to_float(self.manual_volume_var.get(), 0.0)
+            idea = TradeIdea(
+                symbol=symbol,
+                side=side,
+                entry_mode="market",
+                entry_price=price,
+                stop_loss=sl,
+                take_profit=tp,
+                lots=volume,
+                confidence=0.95,
+                regime="manual",
+                reason=f"manual {side}",
+                partial_take_profit=None,
+                trailing_start_r=None,
+                max_hold_bars=0,
+            )
+            equity = float(trader.broker.account_info().get("equity") or trader.broker.account_info().get("balance") or 0.0)
+            spread = trader.broker.current_spread_points(symbol)
+            decision, order = trader.engine.place_trade(idea, equity=equity, spread_points=spread)
+            result = {"decision": decision.reason, "success": bool(order and order.success), "order": order.raw if order else None, "manual": True}
+            self.last_result_var.set("Última ação: sucesso" if result["success"] else "Última ação: falha")
+            self._append_log(
+                f"[{_now_text()}] manual {side.upper()} | approved={decision.approved} | lot={decision.lots:.2f} | SL={sl:.2f} | TP={tp:.2f} | result={result['success']} | retcode={(result.get('order') or {}).get('retcode')}",
+                "info" if result["success"] else "warn",
+            )
+            if not result["success"]:
+                messagebox.showwarning("Ordem manual", f"A ordem foi recusada: {result.get('order')}")
+            else:
+                self._show_toast(f"Ordem manual {side.upper()} enviada", kind="success")
+                self._refresh_all()
+        except Exception as exc:
+            messagebox.showerror("Erro", str(exc))
+
+    def _get_live_price(self, symbol: str, side: str) -> float:
+        with self._lock:
+            trader = self.trader
+        try:
+            trader.broker.ensure_symbol(symbol)
+            import MetaTrader5 as mt5  # type: ignore
+
+            tick = mt5.symbol_info_tick(symbol)
+            if not tick:
+                return 0.0
+            return float(tick.ask if side.lower() == "buy" else tick.bid)
+        except Exception:
+            return 0.0
+
+    def _close_position(self, position: Any, volume: float) -> None:
+        with self._lock:
+            trader = self.trader
+        result = trader.engine.close_single_position(ticket=position.ticket, symbol=position.symbol, side=position.side, volume=volume)
+        self.last_result_var.set("Última ação: sucesso" if result.get("success") else "Última ação: falha")
+        self._append_log(f"[{_now_text()}] fechar ticket={position.ticket} | result={result}", "info" if result.get("success") else "warn")
+        if result.get("success"):
+            self._show_toast(f"Ticket {position.ticket} fechado", kind="success")
+        self._refresh_all()
+
+    def _partial_close_position(self, position: Any) -> None:
+        with self._lock:
+            trader = self.trader
+        result = trader.engine.partial_close_position(ticket=position.ticket, symbol=position.symbol, side=position.side, volume=position.volume, ratio=0.5)
+        self.last_result_var.set("Última ação: sucesso" if result.get("success") else "Última ação: falha")
+        self._append_log(f"[{_now_text()}] parcial 50% ticket={position.ticket} | result={result}", "info" if result.get("success") else "warn")
+        if result.get("success"):
+            self._show_toast(f"Ticket {position.ticket} fechado 50%", kind="success")
+        self._refresh_all()
+
+    def _close_all_positions(self) -> None:
+        if not messagebox.askyesno("Fechar todas", "Deseja fechar todas as posições abertas agora?"):
+            return
+        with self._lock:
+            trader = self.trader
+        results = trader.engine.close_all_positions(self.symbol_var.get().strip() or None)
+        self._append_log(f"[{_now_text()}] fechar todas | results={results}", "info")
+        self._show_toast("Fechamento de todas as posições enviado", kind="info")
+        self._refresh_all()
+
+    def _start_auto(self) -> None:
+        if self._auto_running:
+            return
+        self._auto_running = True
+        self.status_var.set("Automação iniciada")
+        self._append_log(f"[{_now_text()}] automação iniciada", "info")
+        self._auto_thread = threading.Thread(target=self._auto_loop, daemon=True)
+        self._auto_thread.start()
+
+    def _stop_auto(self) -> None:
+        self._auto_running = False
+        self.status_var.set("Automação parada")
+        self._append_log(f"[{_now_text()}] automação parada", "warn")
+
+    def _auto_loop(self) -> None:
+        while self._auto_running:
+            try:
+                with self._lock:
+                    trader = self.trader
+                result = trader.run_once()
+                self._status_queue.put(str(result))
+            except Exception as exc:
+                self._status_queue.put(f"erro: {exc}")
+                self._event_queue.put(NotificationEvent(title="Erro", message=str(exc), priority=0, kind="error"))
+            time.sleep(max(5, int(self.cycle_var.get() or 30)))
+
+    def _preset_chat_question(self, question: str) -> None:
+        self.chat_question_var.set(question)
+        self._send_chat_question()
+
+    def _send_chat_question(self) -> None:
+        question = self.chat_question_var.get().strip()
+        if not question:
+            return
+        self.chat_question_var.set("")
+        self._append_chat("user", question)
+        self.chat_status_var.set("Consultando IA...")
+        threading.Thread(target=self._send_chat_worker, args=(question,), daemon=True).start()
+        try:
+            self.chat_input.focus_set()
+        except Exception:
+            pass
+
+    def _send_chat_worker(self, question: str) -> None:
+        try:
+            with self._lock:
+                trader = self.trader
+            response = trader.ai.chat(question, context=self._build_ai_context(), history=self.chat_history)
+            answer = str(response.get("answer") or "").strip() or "A IA não retornou resposta."
+            self.chat_history.append(("user", question))
+            self.chat_history.append(("assistant", answer))
+            backend = str(response.get("backend") or "unknown")
+            self._event_queue.put(NotificationEvent(title="Chat IA", message=answer[:240], priority=1, kind="info"))
+            self.root.after(0, lambda: self._append_chat("assistant", answer))
+            self.root.after(0, lambda: self.chat_status_var.set(f"IA pronta ({backend})"))
+            self.root.after(0, lambda: self._show_toast("Resposta recebida da IA", kind="success"))
+        except Exception as exc:
+            self.root.after(0, lambda: self.chat_status_var.set("Erro na IA"))
+            self.root.after(0, lambda: self._append_chat("assistant", f"Falha ao consultar a IA: {exc}"))
+            self.root.after(0, lambda: self._show_toast("Falha ao consultar a IA", kind="error"))
+
+    def _build_ai_context(self) -> str:
+        with self._lock:
+            trader = self.trader
+        symbol = self.symbol_var.get().strip() or "XAUUSD"
+        positions = trader.engine.list_positions(symbol)
+        return "\n".join(
+            [
+                f"Símbolo: {symbol}",
+                f"Modo: {'Paper' if trader.paper_mode else 'Live'}",
+                f"Preço atual: {self.current_price_var.get()}",
+                f"Spread: {self.spread_var.get()}",
+                f"PnL do dia: {self.daily_pnl_var.get()}",
+                f"Posições abertas: {len(positions)}",
+                f"Sessão: {self.session_status_var.get()}",
+                f"Bloqueio: {self.lock_status_var.get()}",
+                f"Último resultado: {self.last_result_var.get()}",
+            ]
+        )
+
+    def _poll_queues(self) -> None:
+        try:
+            while True:
+                event = self._event_queue.get_nowait()
+                tag = "info"
+                if event.kind == "warn":
+                    tag = "warn"
+                elif event.kind == "error":
+                    tag = "error"
+                self._append_log(f"[{event.created_at or _now_text()}] {event.kind.upper()} {event.title} | {event.message}", tag)
+                self.last_result_var.set(f"Último evento: {event.title}")
+        except queue.Empty:
+            pass
+
+        try:
+            while True:
+                status = self._status_queue.get_nowait()
+                self.last_result_var.set(status[:160])
+        except queue.Empty:
+            pass
+
+        self.root.after(250, self._poll_queues)
+
+    def _show_toast(self, message: str, *, kind: str = "info", duration_ms: int = 2500) -> None:
+        colors = {
+            "info": ("#0f766e", "#e5f9f5"),
+            "success": ("#15803d", "#ecfdf5"),
+            "warn": ("#b45309", "#fffbeb"),
+            "error": ("#b91c1c", "#fef2f2"),
+        }
+        bg, fg = colors.get(kind, colors["info"])
+        self.toast_var.set(message)
+        try:
+            self.toast_label.configure(background=bg, foreground=fg)
+        except Exception:
+            pass
+        if self.toast_window is not None:
+            try:
+                self.toast_window.destroy()
+            except Exception:
+                pass
+        self.toast_window = tk.Toplevel(self.root)
+        self.toast_window.overrideredirect(True)
+        self.toast_window.attributes("-topmost", True)
+        self.toast_window.configure(bg=bg)
+        label = tk.Label(self.toast_window, text=message, bg=bg, fg=fg, padx=16, pady=10, font=("Segoe UI", 10, "bold"))
+        label.pack()
+        self.root.update_idletasks()
+        x = self.root.winfo_rootx() + self.root.winfo_width() - 360
+        y = self.root.winfo_rooty() + 20
+        self.toast_window.geometry(f"320x48+{max(20, x)}+{max(20, y)}")
+        self.root.after(duration_ms, self._hide_toast)
+
+    def _hide_toast(self) -> None:
+        if self.toast_window is not None:
+            try:
+                self.toast_window.destroy()
+            except Exception:
+                pass
+            self.toast_window = None
+        self.toast_var.set("")
+
+    def _tick(self) -> None:
+        try:
+            self._refresh_all()
+        finally:
+            self.root.after(1000, self._tick)
+
+    def _on_close(self) -> None:
+        self._auto_running = False
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+
+    def run(self) -> None:
+        self.root.mainloop()
+
+
+def launch_gui(config_path: Path) -> None:
+    panel = XAUUSDControlPanel(config_path)
+    panel.run()
+</file>
+
+<file path="configs/default.yaml">
+app:
+  symbol: XAUUSD
+  timeframes:
+  - M1
+  - M5
+  - M15
+  mode: live
+  cycle_seconds: 30
+  position_state_path: runtime/position_state.json
+broker:
+  terminal_path: C:\Program Files\MetaTrader 5\terminal64.exe
+  login: 1513256820
+  password: 4$Kr4!$!!6cA
+  server: FTMO-Demo
+  deviation: 20
+  magic: 2401001
+risk:
+  risk_per_trade: 0.005
+  daily_loss_limit: 0.02
+  max_consecutive_losses: 3
+  max_trades_per_day: 5
+  max_open_positions: 1
+  max_spread_points: 80.0
+  breakeven_trigger_r: 0.9
+  partial_take_profit_r: 1.0
+  final_take_profit_r: 2.0
+  partial_close_ratio: 0.5
+  trailing_start_r: 1.2
+  trailing_atr_mult: 1.2
+  trailing_step_points: 10.0
+  min_rr: 1.2
+  session_start: 00:00
+  session_end: '23:30'
+strategy:
+  atr_period: 14
+  ema_fast: 20
+  ema_slow: 50
+  rsi_period: 14
+  adx_period: 14
+  breakout_lookback: 20
+  range_lookback: 30
+  confirmation_bars: 2
+  max_hold_bars: 20
+ai:
+  enabled: true
+  hf_model: Qwen/Qwen2.5-7B-Instruct-1M
+  timeout_seconds: 12
+notifications:
+  enabled: true
+  queue_file: xauusd_push_queue.txt
+  min_priority: 1
+</file>
+
+<file path="README.md">
+# XAUUSD IA Trader
+
+Scaffolding for an autonomous XAUUSD scalper on MetaTrader 5.
+
+## What this repo contains
+
+- Python trading engine with regime detection, risk control, execution and notifications.
+- Optional Hugging Face intelligence layer for slower contextual analysis.
+- MT5 bridge helper for push notifications.
+- Configuration templates and a growing backlog for implementation.
+
+## Main idea
+
+This project is designed for prop-firm style constraints:
+
+- one trade at a time
+- strict daily loss limits
+- mandatory stop loss
+- no martingale, no grid, no averaging down
+- dynamic SL/TP based on regime and volatility
+- push notifications for every meaningful state change
+
+## Current layout
+
+- `src/xauusd_ia_trader/` - Python engine
+- `mql5/` - MetaTrader 5 helper EA
+- `configs/` - default configuration
+- `tests/` - basic checks
+- `XAUUSD_MT5_Autonomous_Scalper_Spec.md` - project spec and backlog
+
+## Quick start
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+pip install -e .
+copy .env.example .env
+python -m xauusd_ia_trader.cli --config configs/default.yaml --once
+```
+
+To open the interactive dashboard:
+
+```powershell
+python -m xauusd_ia_trader.cli --config configs/default.yaml --gui
+```
+
+The dashboard includes:
+
+- live performance cards for balance, equity, open PnL and daily PnL
+- manual buy/sell buttons with current price and automatic SL/TP at 1:1 RR
+- a live positions panel with close, partial close and close-all actions
+- editable mode, risk, session and broker fields
+- an AI chat tab for questions about the current strategy and operational context
+- real-time logs and MT5 push event feed
+
+To force a demo test trade from the terminal:
+
+```powershell
+python -m xauusd_ia_trader.cli --config configs/default.yaml --once --force-side buy
+```
+
+To run in live mode later:
+
+1. Fill `MT5_TERMINAL_PATH`, `MT5_LOGIN`, `MT5_PASSWORD` and `MT5_SERVER` in `.env`.
+2. Set `XAUUSD_MODE=live`.
+3. Keep `MT5_COMMON_FILES_DIR` pointed to the MT5 common files directory if the automatic detection is not correct.
+4. Start with demo first and confirm the bridge EA is receiving push messages.
+5. Use the GUI to watch status, logs, positions and manual test trades.
+
+## MT5 push notifications
+
+MetaTrader 5 push alerts should be sent by an EA running inside the terminal.
+This repo includes a simple bridge EA that reads a queue file and calls `SendNotification()`.
+
+Before using it:
+
+1. Enable push notifications in MT5.
+2. Set your MetaQuotes ID in MT5 options.
+3. Place the EA in the terminal and attach it to an XAUUSD chart.
+4. Configure the Python side to write to the same common files queue.
+5. Compile and attach `mql5/XAUUSD_PushBridge.mq5` to the same terminal.
+
+## Implementation order
+
+1. Start with paper trading only.
+2. Validate risk limits and notifications.
+3. Forward test on demo.
+4. Tune the regime logic.
+5. Only then consider live deployment.
+</file>
+
+<file path="src/xauusd_ia_trader/broker.py">
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+import pandas as pd
+
+try:
+    import MetaTrader5 as mt5
+except Exception:  # pragma: no cover - optional dependency
+    mt5 = None
+
+
+TIMEFRAME_MAP = {
+    "M1": getattr(mt5, "TIMEFRAME_M1", 1) if mt5 else 1,
+    "M5": getattr(mt5, "TIMEFRAME_M5", 5) if mt5 else 5,
+    "M15": getattr(mt5, "TIMEFRAME_M15", 15) if mt5 else 15,
+    "M30": getattr(mt5, "TIMEFRAME_M30", 30) if mt5 else 30,
+    "H1": getattr(mt5, "TIMEFRAME_H1", 60) if mt5 else 60,
+}
+
+
+def _sanitize_comment(text: str, limit: int = 24) -> str:
+    allowed = []
+    for char in str(text):
+        if char.isalnum() or char in {" ", "_", "-", "."}:
+            allowed.append(char)
+    cleaned = "".join(allowed).strip()
+    if not cleaned:
+        cleaned = "xauusd"
+    return cleaned[:limit]
+
+
+def _pick_filling_mode(info: dict[str, Any], action: str | None = None) -> int | None:
+    if mt5 is None:
+        return None
+    action = (action or "").lower()
+    if action in {"deal", "close"}:
+        return getattr(mt5, "ORDER_FILLING_FOK", None)
+    if action == "pending":
+        return getattr(mt5, "ORDER_FILLING_RETURN", None)
+    return getattr(mt5, "ORDER_FILLING_FOK", None)
+
+
+def _candidate_filling_modes(action: str | None = None) -> list[int | None]:
+    if mt5 is None:
+        return [None]
+    action = (action or "").lower()
+    if action in {"deal", "close"}:
+        return [getattr(mt5, "ORDER_FILLING_FOK", None), getattr(mt5, "ORDER_FILLING_IOC", None), None]
+    if action == "pending":
+        return [getattr(mt5, "ORDER_FILLING_RETURN", None), getattr(mt5, "ORDER_FILLING_FOK", None), getattr(mt5, "ORDER_FILLING_IOC", None), None]
+    return [getattr(mt5, "ORDER_FILLING_FOK", None), getattr(mt5, "ORDER_FILLING_IOC", None), None]
+
+
+@dataclass
+class MT5Broker:
+    config: dict[str, Any]
+    connected: bool = False
+    last_error: str = ""
+
+    def available(self) -> bool:
+        return mt5 is not None
+
+    def connect(self) -> bool:
+        if not self.available():
+            self.last_error = "MetaTrader5 package not installed"
+            return False
+
+        terminal_path = (self.config.get("terminal_path") or "").strip()
+        login = self.config.get("login") or 0
+        password = self.config.get("password") or ""
+        server = self.config.get("server") or ""
+
+        try:
+            mt5.shutdown()
+            if terminal_path:
+                ok = mt5.initialize(path=terminal_path, login=login, password=password, server=server)
+            else:
+                ok = mt5.initialize(login=login, password=password, server=server)
+            self.connected = bool(ok)
+            if not ok:
+                self.last_error = str(mt5.last_error())
+            return self.connected
+        except Exception as exc:
+            self.last_error = str(exc)
+            self.connected = False
+            return False
+
+    def ensure_symbol(self, symbol: str) -> bool:
+        if not self.connected and not self.connect():
+            return False
+        if mt5 is None:
+            return False
+        try:
+            return bool(mt5.symbol_select(symbol, True))
+        except Exception:
+            return False
+
+    def symbol_info(self, symbol: str) -> dict[str, Any]:
+        if mt5 is None:
+            return {}
+        info = mt5.symbol_info(symbol)
+        return info._asdict() if info else {}
+
+    def account_info(self) -> dict[str, Any]:
+        if mt5 is None:
+            return {}
+        info = mt5.account_info()
+        return info._asdict() if info else {}
+
+    def positions_get(self, symbol: str | None = None, magic: int | None = None) -> list[dict[str, Any]]:
+        if mt5 is None:
+            return []
+        try:
+            positions = mt5.positions_get(symbol=symbol) if symbol else mt5.positions_get()
+        except Exception:
+            return []
+        if not positions:
+            return []
+        payload = [position._asdict() for position in positions]
+        if magic is not None:
+            payload = [item for item in payload if int(item.get("magic") or 0) == int(magic)]
+        return payload
+
+    def get_rates(self, symbol: str, timeframe: str, count: int = 300) -> pd.DataFrame:
+        if not self.ensure_symbol(symbol):
+            return pd.DataFrame()
+        tf_value = TIMEFRAME_MAP.get(timeframe, TIMEFRAME_MAP["M5"])
+        rates = mt5.copy_rates_from_pos(symbol, tf_value, 0, count)
+        if rates is None:
+            return pd.DataFrame()
+        df = pd.DataFrame(rates)
+        if df.empty:
+            return df
+        df["time"] = pd.to_datetime(df["time"], unit="s", utc=True)
+        return df.set_index("time")
+
+    def current_spread_points(self, symbol: str) -> float:
+        if mt5 is None:
+            return 0.0
+        tick = mt5.symbol_info_tick(symbol)
+        info = mt5.symbol_info(symbol)
+        if not tick or not info:
+            return 0.0
+        point = float(getattr(info, "point", 0.01) or 0.01)
+        return abs(float(tick.ask) - float(tick.bid)) / point
+
+    def _normalize_price(self, symbol: str, value: float) -> float:
+        info = self.symbol_info(symbol)
+        digits = int(info.get("digits") or 2)
+        return round(float(value), digits)
+
+    def _build_attempts(self, symbol: str, request: dict[str, Any], action: str) -> list[dict[str, Any]]:
+        attempts: list[dict[str, Any]] = []
+        if mt5 is None:
+            return attempts
+
+        for filling_mode in _candidate_filling_modes(action):
+            trial = dict(request)
+            if filling_mode is not None and action in {"deal", "close", "pending"}:
+                trial["type_filling"] = filling_mode
+            else:
+                trial.pop("type_filling", None)
+
+            check = mt5.order_check(trial)
+            check_payload = check._asdict() if check is not None else None
+            attempts.append(
+                {
+                    "type_filling": filling_mode,
+                    "check_retcode": check_payload.get("retcode") if check_payload else None,
+                    "check_comment": check_payload.get("comment") if check_payload else None,
+                }
+            )
+
+            result = mt5.order_send(trial)
+            if result is None:
+                attempts[-1]["send_error"] = str(mt5.last_error())
+                continue
+
+            payload = result._asdict()
+            payload["request"] = trial
+            payload["attempts"] = attempts
+            payload["success"] = payload.get("retcode") in {
+                mt5.TRADE_RETCODE_DONE,
+                getattr(mt5, "TRADE_RETCODE_DONE_PARTIAL", -1),
+                getattr(mt5, "TRADE_RETCODE_PLACED", -1),
+            }
+            if payload["success"]:
+                return payload
+            attempts[-1]["send_retcode"] = payload.get("retcode")
+            attempts[-1]["send_comment"] = payload.get("comment")
+
+        return {"success": False, "message": "all filling modes rejected", "attempts": attempts, "request": request}
+
+    def send_market_order(
+        self,
+        *,
+        symbol: str,
+        side: str,
+        lots: float,
+        sl: float,
+        tp: float,
+        magic: int,
+        deviation: int = 20,
+        comment: str = "",
+    ) -> dict[str, Any]:
+        if mt5 is None:
+            return {"success": False, "message": "MetaTrader5 not installed"}
+        if not self.ensure_symbol(symbol):
+            return {"success": False, "message": "symbol not available"}
+
+        tick = mt5.symbol_info_tick(symbol)
+        if tick is None:
+            return {"success": False, "message": "no tick data"}
+
+        side = side.lower()
+        order_type = mt5.ORDER_TYPE_BUY if side == "buy" else mt5.ORDER_TYPE_SELL
+        price = self._normalize_price(symbol, float(tick.ask if side == "buy" else tick.bid))
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": symbol,
+            "volume": float(lots),
+            "type": order_type,
+            "price": price,
+            "sl": self._normalize_price(symbol, sl),
+            "tp": self._normalize_price(symbol, tp),
+            "deviation": int(deviation),
+            "magic": int(magic),
+            "comment": _sanitize_comment(comment),
+            "type_time": mt5.ORDER_TIME_GTC,
+        }
+        return self._build_attempts(symbol, request, "deal")
+
+    def modify_position(
+        self,
+        *,
+        ticket: int,
+        symbol: str,
+        sl: float,
+        tp: float,
+    ) -> dict[str, Any]:
+        if mt5 is None:
+            return {"success": False, "message": "MetaTrader5 not installed"}
+        if not self.ensure_symbol(symbol):
+            return {"success": False, "message": "symbol not available"}
+        request = {
+            "action": mt5.TRADE_ACTION_SLTP,
+            "position": int(ticket),
+            "symbol": symbol,
+            "sl": self._normalize_price(symbol, sl),
+            "tp": self._normalize_price(symbol, tp),
+        }
+        result = mt5.order_send(request)
+        if result is None:
+            return {"success": False, "message": str(mt5.last_error()), "request": request}
+        payload = result._asdict()
+        payload["success"] = payload.get("retcode") == mt5.TRADE_RETCODE_DONE
+        payload["request"] = request
+        return payload
+
+    def close_position(
+        self,
+        *,
+        ticket: int,
+        symbol: str,
+        side: str,
+        volume: float,
+        magic: int = 0,
+        deviation: int = 20,
+    ) -> dict[str, Any]:
+        if mt5 is None:
+            return {"success": False, "message": "MetaTrader5 not installed"}
+        if not self.ensure_symbol(symbol):
+            return {"success": False, "message": "symbol not available"}
+        tick = mt5.symbol_info_tick(symbol)
+        if tick is None:
+            return {"success": False, "message": "no tick data"}
+        side = side.lower()
+        order_type = mt5.ORDER_TYPE_SELL if side == "buy" else mt5.ORDER_TYPE_BUY
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "position": int(ticket),
+            "symbol": symbol,
+            "volume": float(volume),
+            "type": order_type,
+            "price": self._normalize_price(symbol, float(tick.bid if side == "buy" else tick.ask)),
+            "deviation": int(deviation),
+            "magic": int(magic),
+            "comment": "close",
+            "type_time": mt5.ORDER_TIME_GTC,
+        }
+        return self._build_attempts(symbol, request, "close")
+
+    def send_pending_order(
+        self,
+        *,
+        symbol: str,
+        side: str,
+        lots: float,
+        entry: float,
+        sl: float,
+        tp: float,
+        magic: int,
+        deviation: int = 20,
+        comment: str = "",
+    ) -> dict[str, Any]:
+        if mt5 is None:
+            return {"success": False, "message": "MetaTrader5 not installed"}
+        if not self.ensure_symbol(symbol):
+            return {"success": False, "message": "symbol not available"}
+
+        side = side.lower()
+        order_type = mt5.ORDER_TYPE_BUY_STOP if side == "buy" else mt5.ORDER_TYPE_SELL_STOP
+        request = {
+            "action": mt5.TRADE_ACTION_PENDING,
+            "symbol": symbol,
+            "volume": float(lots),
+            "type": order_type,
+            "price": self._normalize_price(symbol, entry),
+            "sl": self._normalize_price(symbol, sl),
+            "tp": self._normalize_price(symbol, tp),
+            "deviation": int(deviation),
+            "magic": int(magic),
+            "comment": _sanitize_comment(comment),
+            "type_time": mt5.ORDER_TIME_GTC,
+        }
+        return self._build_attempts(symbol, request, "pending")
+</file>
+
+<file path="src/xauusd_ia_trader/trader.py">
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
+
+import pandas as pd
+
+from .ai import HuggingFaceAdvisor
+from .broker import MT5Broker
+from .execution import ExecutionEngine
+from .indicators import add_features
+from .models import MarketSnapshot, TradeIdea
+from .notifier import ConsoleSink, MT5QueueSink, NotificationBus
+from .regime import classify_regime
+from .risk import RiskManager
+from .state_store import PositionStateStore
+
+
+@dataclass
+class XAUUSDAutonomousTrader:
+    config: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        self.symbol = self.config["app"]["symbol"]
+        self.paper_mode = self.config["app"].get("mode", "paper") != "live"
+        self.broker = MT5Broker(self.config["broker"])
+        self.risk = RiskManager(self.config["risk"])
+        sinks = [ConsoleSink()]
+        if self.config["notifications"].get("enabled", True):
+            sinks.append(MT5QueueSink(self.config["notifications"].get("queue_file", "xauusd_push_queue.txt")))
+        self.notifier = NotificationBus(sinks, min_priority=int(self.config["notifications"].get("min_priority", 1)))
+        self.ai = HuggingFaceAdvisor(
+            enabled=bool(self.config["ai"].get("enabled", False)),
+            model=self.config["ai"].get("hf_model", ""),
+            timeout_seconds=int(self.config["ai"].get("timeout_seconds", 12)),
+        )
+        self.engine = ExecutionEngine(
+            broker=self.broker,
+            risk=self.risk,
+            notifier=self.notifier,
+            magic=int(self.config["broker"].get("magic", 2401001)),
+            state_store=PositionStateStore(self.config["app"].get("position_state_path", "runtime/position_state.json")),
+            deviation=int(self.config["broker"].get("deviation", 20)),
+            paper_mode=self.paper_mode,
+        )
+
+    def _pick_idea(self, df: pd.DataFrame, regime: str, ai_hint: dict[str, Any], symbol_info: dict[str, Any]) -> TradeIdea | None:
+        latest = df.iloc[-1]
+        price = float(latest["close"])
+        atr = float(latest.get("atr_14", 0.0) or 0.0)
+        ema_fast = float(latest.get("ema_20", price) or price)
+        ema_slow = float(latest.get("ema_50", price) or price)
+        adx = float(latest.get("adx_14", 0.0) or 0.0)
+        rsi = float(latest.get("rsi_14", 50.0) or 50.0)
+        high_20 = float(latest.get("rolling_high_20", price) or price)
+        low_20 = float(latest.get("rolling_low_20", price) or price)
+        spread_points = float(latest.get("spread_points", 0.0) or 0.0)
+        point = float(symbol_info.get("point") or 0.01)
+        min_stop_points = float(symbol_info.get("trade_stops_level") or 0.0)
+
+        buffer = max(atr * 0.15, price * 0.0001, point * 10)
+        min_stop_distance = max(atr * 0.7, buffer * 2, min_stop_points * point, spread_points * point * 2)
+
+        if regime == "trend_up":
+            side = "buy"
+            entry_mode = "market"
+            entry = price
+            stop = min(low_20, ema_fast, entry - min_stop_distance)
+            if stop >= entry:
+                stop = entry - min_stop_distance
+            risk = max(entry - stop, min_stop_distance)
+            tp = entry + risk * float(self.config["risk"].get("final_take_profit_r", 2.0))
+            confidence = min(0.95, 0.65 + (adx / 100.0) + max((ema_fast - ema_slow) / max(price, 1.0), 0))
+            reason = "trend continuation scalp"
+        elif regime == "trend_down":
+            side = "sell"
+            entry_mode = "market"
+            entry = price
+            stop = max(high_20, ema_fast, entry + min_stop_distance)
+            if stop <= entry:
+                stop = entry + min_stop_distance
+            risk = max(stop - entry, min_stop_distance)
+            tp = entry - risk * float(self.config["risk"].get("final_take_profit_r", 2.0))
+            confidence = min(0.95, 0.65 + (adx / 100.0) + max((ema_slow - ema_fast) / max(price, 1.0), 0))
+            reason = "trend continuation scalp"
+        elif regime in {"range", "compression"}:
+            if price <= low_20 + atr * 0.35 and rsi <= 45:
+                side = "buy"
+                entry_mode = "market"
+                entry = price
+                stop = min(low_20, entry - min_stop_distance)
+                if stop >= entry:
+                    stop = entry - min_stop_distance
+                risk = max(entry - stop, min_stop_distance)
+                tp = entry + risk * 1.4
+                confidence = 0.66
+                reason = "range fade long"
+            elif price >= high_20 - atr * 0.35 and rsi >= 55:
+                side = "sell"
+                entry_mode = "market"
+                entry = price
+                stop = max(high_20, entry + min_stop_distance)
+                if stop <= entry:
+                    stop = entry + min_stop_distance
+                risk = max(stop - entry, min_stop_distance)
+                tp = entry - risk * 1.4
+                confidence = 0.66
+                reason = "range fade short"
+            else:
+                return None
+        else:
+            return None
+
+        if risk <= 0:
+            return None
+
+        partial = entry + (risk if side == "buy" else -risk)
+        trailing_start = 0.9
+        return TradeIdea(
+            symbol=self.symbol,
+            side=side,
+            entry_mode=entry_mode,
+            entry_price=float(entry),
+            stop_loss=float(stop),
+            take_profit=float(tp),
+            lots=0.0,
+            confidence=float(min(confidence, 0.98)),
+            regime=regime,
+            reason=f"{reason} ai{ai_hint.get('score', 0.5):.2f}",
+            partial_take_profit=float(partial),
+            trailing_start_r=trailing_start,
+            max_hold_bars=int(self.config["strategy"].get("max_hold_bars", 20)),
+        )
+
+    def _force_idea(self, *, side: str, price: float, symbol_info: dict[str, Any]) -> TradeIdea:
+        point = float(symbol_info.get("point") or 0.01)
+        digits = int(symbol_info.get("digits") or 2)
+        atr_buffer = max(price * 0.0006, point * 50)
+        if side == "buy":
+            stop = round(price - atr_buffer, digits)
+            take = round(price + atr_buffer * 1.5, digits)
+        else:
+            stop = round(price + atr_buffer, digits)
+            take = round(price - atr_buffer * 1.5, digits)
+        return TradeIdea(
+            symbol=self.symbol,
+            side=side,
+            entry_mode="market",
+            entry_price=round(price, digits),
+            stop_loss=stop,
+            take_profit=take,
+            lots=0.0,
+            confidence=0.1,
+            regime="force",
+            reason=f"forced {side}",
+            partial_take_profit=None,
+            trailing_start_r=None,
+            max_hold_bars=5,
+        )
+
+    def run_once(self, force_side: str | None = None) -> dict[str, Any]:
+        if not self.broker.connect():
+            self.notifier.error("MT5 connection failed", self.broker.last_error or "unknown error", symbol=self.symbol, priority=0)
+            return {"success": False, "reason": self.broker.last_error}
+
+        symbol_info = self.broker.symbol_info(self.symbol)
+        account = self.broker.account_info()
+        equity = float(account.get("equity") or account.get("balance") or 0.0)
+        spread_points = self.broker.current_spread_points(self.symbol)
+
+        if self.paper_mode:
+            self.risk.state.open_positions = len(self.engine.state_store.active_items(self.symbol))
+        else:
+            self.risk.state.open_positions = len(self.broker.positions_get(symbol=self.symbol, magic=int(self.config["broker"].get("magic", 2401001))))
+
+        frames = {}
+        for tf in self.config["app"].get("timeframes", ["M1", "M5", "M15"]):
+            frames[tf] = self.broker.get_rates(self.symbol, tf, 300)
+        df = pd.DataFrame()
+        for candidate in ("M5", "M1", "M15"):
+            frame = frames.get(candidate)
+            if frame is not None and not frame.empty:
+                df = frame
+                break
+        if df.empty:
+            self.notifier.warn("No market data", "could not load rates", symbol=self.symbol, priority=1)
+            return {"success": False, "reason": "no data"}
+
+        df = add_features(df)
+        df["spread_points"] = spread_points
+        regime = classify_regime(df, config=self.config["strategy"])
+        ai_hint = self.ai.score_context(
+            f"symbol={self.symbol}\nregime={regime.regime}\nreason={regime.reason}\nspread={spread_points:.2f}"
+        )
+        snapshot = MarketSnapshot(
+            symbol=self.symbol,
+            timeframe="M5",
+            as_of=datetime.now(UTC),
+            regime=regime.regime,
+            spread_points=spread_points,
+            features={"regime_reason": regime.reason, **ai_hint},
+        )
+
+        self.notifier.info(
+            "Regime detected",
+            f"{snapshot.symbol} | {snapshot.regime} | spread={snapshot.spread_points:.1f} | exec={symbol_info.get('trade_exemode', '-')}",
+            symbol=self.symbol,
+            priority=2,
+        )
+
+        live_price = float(df.iloc[-1]["close"])
+        live_atr = float(df.iloc[-1].get("atr_14", 0.0) or 0.0)
+        lifecycle_actions = self.engine.manage_positions(
+            symbol=self.symbol,
+            current_price=live_price,
+            atr=live_atr,
+            spread_points=spread_points,
+        )
+        if lifecycle_actions:
+            self.notifier.info(
+                "Position management",
+                f"{self.symbol} | actions={len(lifecycle_actions)}",
+                symbol=self.symbol,
+                priority=1,
+            )
+
+        if force_side:
+            forced_idea = self._force_idea(side=force_side.lower(), price=live_price, symbol_info=symbol_info)
+            decision, order = self.engine.place_trade(forced_idea, equity=equity, spread_points=spread_points)
+            if order and order.raw:
+                self.notifier.info(
+                    "Forced trade result",
+                    f"{self.symbol} | success={order.success} | retcode={order.raw.get('retcode')} | attempts={order.raw.get('attempts')}",
+                    symbol=self.symbol,
+                    priority=1,
+                )
+            return {
+                "success": bool(order and order.success),
+                "forced": True,
+                "decision": decision.reason,
+                "order": order.raw if order else None,
+                "management": lifecycle_actions,
+            }
+
+        idea = self._pick_idea(df, regime.regime, ai_hint, symbol_info)
+        if idea is None:
+            self.notifier.info("No trade", f"{self.symbol} | {regime.reason}", symbol=self.symbol, priority=2)
+            return {"success": True, "action": "flat", "regime": regime.regime, "reason": regime.reason, "management": lifecycle_actions}
+
+        decision, order = self.engine.place_trade(idea, equity=equity, spread_points=spread_points)
+        if decision.approved and order and order.success:
+            self.risk.register_entry()
+            self.notifier.info("Trade submitted", f"{idea.symbol} {idea.side.upper()} | paper={self.paper_mode}", symbol=self.symbol, priority=1)
+            return {
+                "success": True,
+                "regime": regime.regime,
+                "decision": decision.reason,
+                "order": order.raw,
+                "paper_mode": self.paper_mode,
+                "management": lifecycle_actions,
+            }
+
+        return {
+            "success": False,
+            "regime": regime.regime,
+            "decision": decision.reason,
+            "order": order.raw if order else None,
+            "management": lifecycle_actions,
+        }
+</file>
+
+</files>

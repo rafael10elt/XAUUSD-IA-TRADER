@@ -6,6 +6,7 @@ src/xauusd_ia_trader/broker.py
 src/xauusd_ia_trader/cli.py
 src/xauusd_ia_trader/config.py
 src/xauusd_ia_trader/execution.py
+src/xauusd_ia_trader/gui.py
 src/xauusd_ia_trader/indicators.py
 src/xauusd_ia_trader/models.py
 src/xauusd_ia_trader/notifier.py

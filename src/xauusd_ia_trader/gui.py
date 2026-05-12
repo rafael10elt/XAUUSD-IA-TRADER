@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import queue
 import threading
 import time
@@ -171,12 +172,15 @@ class XAUUSDControlPanel:
 
         self.ai_enabled_var = tk.BooleanVar(value=bool(ai.get("enabled", False)))
         self.ai_model_var = tk.StringVar(value=str(ai.get("hf_model", "")))
+        self.ai_api_key_var = tk.StringVar(value=str(ai.get("hf_api_key", os.getenv("HF_API_KEY", ""))))
         self.queue_file_var = tk.StringVar(value=str(notifications.get("queue_file", "xauusd_push_queue.txt")))
 
         self.side_var = tk.StringVar(value="buy")
         self.manual_volume_var = tk.StringVar(value="")
         self.manual_auto_sl_var = tk.StringVar(value="-")
         self.manual_auto_tp_var = tk.StringVar(value="-")
+        self.manual_sl_override_var = tk.StringVar(value="")
+        self.manual_tp_override_var = tk.StringVar(value="")
         self.manual_lot_preview_var = tk.StringVar(value="Lote sugerido: -")
         self.current_price_var = tk.StringVar(value="-")
         self.spread_var = tk.StringVar(value="-")
@@ -347,10 +351,11 @@ class XAUUSDControlPanel:
             wraplength=320,
             justify="left",
         ).pack(anchor="w", pady=(0, 10))
-        ttk.Button(quick, text="Atualizar agora", command=self._refresh_now, style="Info.TButton").pack(fill="x", pady=4)
-        ttk.Button(quick, text="Abrir compra manual", command=lambda: self._manual_trade("buy"), style="Success.TButton").pack(fill="x", pady=4)
-        ttk.Button(quick, text="Abrir venda manual", command=lambda: self._manual_trade("sell"), style="Danger.TButton").pack(fill="x", pady=4)
-        ttk.Button(quick, text="Fechar todas", command=self._close_all_positions, style="Danger.TButton").pack(fill="x", pady=4)
+        ttk.Button(quick, text="Atualizar agora", command=self._refresh_now, style="Info.TButton").pack(fill="x", pady=(4, 10))
+        ttk.Button(quick, text="Abrir compra manual", command=lambda: self._manual_trade("buy"), style="Success.TButton").pack(fill="x", pady=10, ipady=6)
+        ttk.Button(quick, text="Abrir venda manual", command=lambda: self._manual_trade("sell"), style="Danger.TButton").pack(fill="x", pady=10, ipady=6)
+        ttk.Separator(quick, orient="horizontal").pack(fill="x", pady=6)
+        ttk.Button(quick, text="Fechar todas", command=self._close_all_positions, style="Danger.TButton").pack(fill="x", pady=(4, 2), ipady=4)
 
     def _build_manual_tab(self) -> None:
         outer = ttk.Frame(self.manual_tab, style="App.TFrame", padding=12)
@@ -369,6 +374,8 @@ class XAUUSDControlPanel:
             ("Lote manual", self.manual_volume_var),
             ("SL automático", self.manual_auto_sl_var),
             ("TP automático", self.manual_auto_tp_var),
+            ("SL manual (opc.)", self.manual_sl_override_var),
+            ("TP manual (opc.)", self.manual_tp_override_var),
             ("Lote sugerido", self.manual_lot_preview_var),
         ]
 
@@ -388,6 +395,9 @@ class XAUUSDControlPanel:
             else:
                 entry = ttk.Entry(row, textvariable=var, style="Dark.TEntry")
                 entry.pack(side="left", fill="x", expand=True)
+            # Hint for manual override fields
+            if label in {"SL manual (opc.)", "TP manual (opc.)"}:
+                ttk.Label(row, text="↩ sobrescreve auto", style="Subtitle.TLabel", foreground="#6b7280").pack(side="left", padx=(6, 0))
 
         actions = ttk.Frame(left, style="Card.TFrame")
         actions.pack(fill="x", pady=(14, 0))
@@ -397,7 +407,7 @@ class XAUUSDControlPanel:
 
         ttk.Label(
             left,
-            text="As ordens manuais são abertas a mercado com SL e TP automáticos em RR 1:1.",
+            text="SL/TP automáticos em RR 1:1. Preencha SL/TP manual para sobrescrever os valores automáticos.",
             style="Subtitle.TLabel",
             wraplength=760,
             justify="left",
@@ -546,6 +556,59 @@ class XAUUSDControlPanel:
             justify="left",
         ).pack(anchor="w", pady=(10, 0))
 
+        # --- AI configuration inline ---
+        ttk.Separator(right, orient="horizontal").pack(fill="x", pady=(14, 8))
+        ttk.Label(right, text="Configuração da IA", style="MetricTitle.TLabel").pack(anchor="w")
+
+        cfg_row = ttk.Frame(right, style="Card.TFrame")
+        cfg_row.pack(fill="x", pady=(6, 2))
+        ttk.Label(cfg_row, text="IA habilitada", style="Subtitle.TLabel", width=14).pack(side="left")
+        ttk.Checkbutton(cfg_row, variable=self.ai_enabled_var, style="Dark.TCheckbutton").pack(side="left")
+
+        model_row = ttk.Frame(right, style="Card.TFrame")
+        model_row.pack(fill="x", pady=2)
+        ttk.Label(model_row, text="Modelo", style="Subtitle.TLabel", width=14).pack(side="left")
+        model_cb = ttk.Combobox(
+            model_row,
+            textvariable=self.ai_model_var,
+            values=[
+                # Groq models
+                "llama-3.3-70b-versatile",
+                "llama-3.1-70b-versatile",
+                "llama-3.1-8b-instant",
+                "mixtral-8x7b-32768",
+                "gemma2-9b-it",
+                # HuggingFace models
+                "Qwen/Qwen2.5-7B-Instruct",
+                "Qwen/Qwen2.5-7B-Instruct-1M",
+                "google/gemma-2-2b-it",
+            ],
+            style="Dark.TCombobox",
+            width=20,
+        )
+        model_cb.pack(side="left", fill="x", expand=True)
+
+        key_row = ttk.Frame(right, style="Card.TFrame")
+        key_row.pack(fill="x", pady=2)
+        ttk.Label(key_row, text="API Key", style="Subtitle.TLabel", width=14).pack(side="left")
+        key_entry = ttk.Entry(key_row, textvariable=self.ai_api_key_var, style="Dark.TEntry", width=22, show="*")
+        key_entry.pack(side="left", fill="x", expand=True)
+
+        ttk.Label(
+            right,
+            text="Groq: chave gsk_… | HF: chave hf_…\nModelos Groq são mais rápidos e gratuitos.",
+            style="Subtitle.TLabel",
+            wraplength=260,
+            justify="left",
+        ).pack(anchor="w", pady=(4, 0))
+
+        ttk.Button(
+            right,
+            text="Aplicar configuração IA",
+            command=self._apply_ai_config,
+            style="Accent.TButton",
+        ).pack(fill="x", pady=(8, 0))
+
     def _build_logs_tab(self) -> None:
         outer = ttk.Frame(self.logs_tab, style="App.TFrame", padding=12)
         outer.pack(fill="both", expand=True)
@@ -678,6 +741,7 @@ class XAUUSDControlPanel:
 
         self.ai_enabled_var.set(bool(ai.get("enabled", False)))
         self.ai_model_var.set(str(ai.get("hf_model", "")))
+        self.ai_api_key_var.set(str(ai.get("hf_api_key", os.getenv("HF_API_KEY", ""))))
         self.queue_file_var.set(str(notifications.get("queue_file", "xauusd_push_queue.txt")))
         self.mode_status_var.set("Live" if self.mode_var.get().lower() == "live" else "Paper")
 
@@ -720,6 +784,7 @@ class XAUUSDControlPanel:
             "ai": {
                 "enabled": bool(self.ai_enabled_var.get()),
                 "hf_model": self.ai_model_var.get().strip(),
+                "hf_api_key": self.ai_api_key_var.get().strip(),
                 "timeout_seconds": int(self.config.get("ai", {}).get("timeout_seconds", 12)),
             },
             "notifications": {
@@ -743,6 +808,37 @@ class XAUUSDControlPanel:
         self._append_log(f"[{_now_text()}] configurações aplicadas e salvas", "info")
         self._show_toast("Configurações salvas com sucesso", kind="success")
         self._refresh_all()
+
+    def _apply_ai_config(self) -> None:
+        """Apply only the AI configuration (enabled, model, api_key) and rebuild trader."""
+        api_key = self.ai_api_key_var.get().strip()
+        model = self.ai_model_var.get().strip()
+        enabled = bool(self.ai_enabled_var.get())
+        if enabled and not api_key:
+            messagebox.showwarning("IA", "Informe a API Key para habilitar a IA.\n\nGroq: obtenha em console.groq.com\nHuggingFace: obtenha em huggingface.co/settings/tokens")
+            return
+        if enabled and not model:
+            messagebox.showwarning("IA", "Selecione ou digite um modelo.\n\nExemplos Groq: llama-3.3-70b-versatile\nExemplos HF: Qwen/Qwen2.5-7B-Instruct")
+            return
+        # Detect provider from key prefix
+        provider = "groq" if api_key.startswith("gsk_") else "huggingface"
+        # Persist to environment so the advisor picks up immediately
+        os.environ["HF_API_KEY"] = api_key
+        os.environ["HF_MODEL"] = model
+        with self._lock:
+            self.config.setdefault("ai", {}).update({
+                "enabled": enabled,
+                "hf_model": model,
+                "hf_api_key": api_key,
+                "timeout_seconds": int(self.config.get("ai", {}).get("timeout_seconds", 12)),
+            })
+            self._persist_config()
+            self.trader = self._build_trader()
+        status = "habilitada" if enabled else "desabilitada"
+        provider_label = "Groq" if provider == "groq" else "HuggingFace"
+        self.chat_status_var.set(f"IA {status} ({provider_label}:{model})")
+        self._append_log(f"[{_now_text()}] IA configurada: provider={provider_label} model={model} enabled={enabled}", "info")
+        self._show_toast(f"IA {status} via {provider_label}", kind="success")
 
     def _update_market_data(self) -> None:
         with self._lock:
@@ -938,6 +1034,13 @@ class XAUUSDControlPanel:
             if sl <= 0 or tp <= 0:
                 messagebox.showwarning("SL/TP", "Não foi possível calcular SL/TP automaticamente.")
                 return
+            # Apply manual overrides if provided
+            sl_override = _to_float(self.manual_sl_override_var.get(), 0.0)
+            tp_override = _to_float(self.manual_tp_override_var.get(), 0.0)
+            if sl_override > 0:
+                sl = sl_override
+            if tp_override > 0:
+                tp = tp_override
             volume = _to_float(self.manual_volume_var.get(), 0.0)
             idea = TradeIdea(
                 symbol=symbol,

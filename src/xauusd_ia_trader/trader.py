@@ -34,6 +34,7 @@ class XAUUSDAutonomousTrader:
             enabled=bool(self.config["ai"].get("enabled", False)),
             model=self.config["ai"].get("hf_model", ""),
             timeout_seconds=int(self.config["ai"].get("timeout_seconds", 12)),
+            api_key=self.config["ai"].get("hf_api_key", ""),
         )
         self.engine = ExecutionEngine(
             broker=self.broker,
