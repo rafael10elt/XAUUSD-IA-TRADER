@@ -42,7 +42,9 @@ The content is organized as follows:
 <directory_structure>
 .env.example
 .gitignore
+build.bat
 configs/default.yaml
+main.py
 mql5/XAUUSD_PushBridge.mq5
 pyproject.toml
 README.md
@@ -70,6 +72,7 @@ tests/test_regime.py
 tests/test_risk.py
 tests/test_state_store.py
 XAUUSD_MT5_Autonomous_Scalper_Spec.md
+XAUUSD-IA-Trader.spec
 </directory_structure>
 
 <files>
@@ -91,6 +94,82 @@ runtime/
 models/
 outputs/
 .env
+</file>
+
+<file path="build.bat">
+@echo off
+chcp 65001 >nul
+echo.
+echo === XAUUSD IA Trader - Build ===
+echo.
+
+echo [1/5] Instalando PyInstaller...
+pip install pyinstaller pyinstaller-hooks-contrib --quiet
+if %errorlevel% neq 0 ( echo ERRO ao instalar PyInstaller & pause & exit /b 1 )
+
+echo [2/5] Instalando dependencias...
+pip install -r requirements.txt --quiet
+if %errorlevel% neq 0 ( echo ERRO ao instalar dependencias & pause & exit /b 1 )
+
+echo [3/5] Instalando pacote local...
+pip install -e . --quiet
+if %errorlevel% neq 0 ( echo ERRO ao instalar pacote local & pause & exit /b 1 )
+
+echo [4/5] Limpando builds anteriores...
+if exist dist rmdir /s /q dist
+if exist build rmdir /s /q build
+if exist "XAUUSD-IA-Trader.spec" del /f /q "XAUUSD-IA-Trader.spec"
+
+echo [5/5] Compilando executavel...
+pyinstaller --onefile --windowed --name "XAUUSD-IA-Trader" --add-data "configs;configs" --hidden-import "xauusd_ia_trader" --hidden-import "xauusd_ia_trader.ai" --hidden-import "xauusd_ia_trader.broker" --hidden-import "xauusd_ia_trader.cli" --hidden-import "xauusd_ia_trader.config" --hidden-import "xauusd_ia_trader.execution" --hidden-import "xauusd_ia_trader.gui" --hidden-import "xauusd_ia_trader.indicators" --hidden-import "xauusd_ia_trader.models" --hidden-import "xauusd_ia_trader.notifier" --hidden-import "xauusd_ia_trader.regime" --hidden-import "xauusd_ia_trader.risk" --hidden-import "xauusd_ia_trader.state_store" --hidden-import "xauusd_ia_trader.trader" --hidden-import "tkinter" --hidden-import "tkinter.ttk" --hidden-import "yaml" --hidden-import "pandas" --hidden-import "numpy" --hidden-import "requests" --hidden-import "dotenv" --collect-all "xauusd_ia_trader" --noconfirm main.py
+if %errorlevel% neq 0 ( echo ERRO na compilacao & pause & exit /b 1 )
+
+echo.
+echo Copiando arquivos de configuracao...
+if not exist "dist\configs" mkdir "dist\configs"
+xcopy /e /y "configs\*" "dist\configs\" >nul
+
+if not exist "dist\runtime" mkdir "dist\runtime"
+
+if exist ".env" (
+    copy /y ".env" "dist\.env" >nul
+    echo .env copiado para dist/
+) else (
+    echo AVISO: .env nao encontrado. Crie dist\.env com suas credenciais.
+)
+
+echo.
+echo === Build concluido! ===
+echo Executavel: dist\XAUUSD-IA-Trader.exe
+echo.
+echo Estrutura da pasta dist\:
+echo   XAUUSD-IA-Trader.exe
+echo   configs\default.yaml
+echo   runtime\
+echo   .env
+echo.
+pause
+</file>
+
+<file path="main.py">
+# main.py — ponto de entrada do executável
+# Coloque este arquivo na raiz do projeto (mesmo nível que configs/)
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+# Garante que o src/ seja encontrado quando rodando como .exe
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys.executable).parent
+else:
+    BASE_DIR = Path(__file__).parent
+
+CONFIG_PATH = BASE_DIR / "configs" / "default.yaml"
+
+from xauusd_ia_trader.gui import launch_gui  # noqa: E402
+
+launch_gui(CONFIG_PATH)
 </file>
 
 <file path="pyproject.toml">
@@ -121,32 +200,6 @@ Name: xauusd-ia-trader
 Version: 0.1.0
 Summary: Autonomous XAUUSD MT5 scalper with regime adaptation and prop-firm risk controls
 Requires-Python: >=3.11
-</file>
-
-<file path="src/xauusd_ia_trader.egg-info/SOURCES.txt">
-README.md
-pyproject.toml
-src/xauusd_ia_trader/__init__.py
-src/xauusd_ia_trader/ai.py
-src/xauusd_ia_trader/broker.py
-src/xauusd_ia_trader/cli.py
-src/xauusd_ia_trader/config.py
-src/xauusd_ia_trader/execution.py
-src/xauusd_ia_trader/indicators.py
-src/xauusd_ia_trader/models.py
-src/xauusd_ia_trader/notifier.py
-src/xauusd_ia_trader/regime.py
-src/xauusd_ia_trader/risk.py
-src/xauusd_ia_trader/state_store.py
-src/xauusd_ia_trader/trader.py
-src/xauusd_ia_trader.egg-info/PKG-INFO
-src/xauusd_ia_trader.egg-info/SOURCES.txt
-src/xauusd_ia_trader.egg-info/dependency_links.txt
-src/xauusd_ia_trader.egg-info/top_level.txt
-tests/test_execution.py
-tests/test_regime.py
-tests/test_risk.py
-tests/test_state_store.py
 </file>
 
 <file path="src/xauusd_ia_trader.egg-info/top_level.txt">
@@ -971,6 +1024,54 @@ But for a prop-firm target, the winning formula is:
 The system should be designed to survive bad market conditions, not just look intelligent in good ones.
 </file>
 
+<file path="XAUUSD-IA-Trader.spec">
+# -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_all
+
+datas = [('configs', 'configs')]
+binaries = []
+hiddenimports = ['xauusd_ia_trader', 'xauusd_ia_trader.ai', 'xauusd_ia_trader.broker', 'xauusd_ia_trader.cli', 'xauusd_ia_trader.config', 'xauusd_ia_trader.execution', 'xauusd_ia_trader.gui', 'xauusd_ia_trader.indicators', 'xauusd_ia_trader.models', 'xauusd_ia_trader.notifier', 'xauusd_ia_trader.regime', 'xauusd_ia_trader.risk', 'xauusd_ia_trader.state_store', 'xauusd_ia_trader.trader', 'tkinter', 'tkinter.ttk', 'yaml', 'pandas', 'numpy', 'requests', 'dotenv']
+tmp_ret = collect_all('xauusd_ia_trader')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+
+
+a = Analysis(
+    ['main.py'],
+    pathex=[],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    noarchive=False,
+    optimize=0,
+)
+pyz = PYZ(a.pure)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    [],
+    name='XAUUSD-IA-Trader',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+</file>
+
 <file path="requirements.txt">
 loguru>=0.7.2
 numpy>=1.26.4
@@ -983,6 +1084,33 @@ pytest>=8.3.2
 
 # Optional at runtime when MT5 is available.
 MetaTrader5>=5.0.45 ; sys_platform == "win32"
+</file>
+
+<file path="src/xauusd_ia_trader.egg-info/SOURCES.txt">
+README.md
+pyproject.toml
+src/xauusd_ia_trader/__init__.py
+src/xauusd_ia_trader/ai.py
+src/xauusd_ia_trader/broker.py
+src/xauusd_ia_trader/cli.py
+src/xauusd_ia_trader/config.py
+src/xauusd_ia_trader/execution.py
+src/xauusd_ia_trader/gui.py
+src/xauusd_ia_trader/indicators.py
+src/xauusd_ia_trader/models.py
+src/xauusd_ia_trader/notifier.py
+src/xauusd_ia_trader/regime.py
+src/xauusd_ia_trader/risk.py
+src/xauusd_ia_trader/state_store.py
+src/xauusd_ia_trader/trader.py
+src/xauusd_ia_trader.egg-info/PKG-INFO
+src/xauusd_ia_trader.egg-info/SOURCES.txt
+src/xauusd_ia_trader.egg-info/dependency_links.txt
+src/xauusd_ia_trader.egg-info/top_level.txt
+tests/test_execution.py
+tests/test_regime.py
+tests/test_risk.py
+tests/test_state_store.py
 </file>
 
 <file path="src/xauusd_ia_trader/__init__.py">
@@ -1566,192 +1694,6 @@ XAUUSD_MODE=live
 XAUUSD_POSITION_STATE_PATH=runtime/position_state.json
 </file>
 
-<file path="src/xauusd_ia_trader/ai.py">
-from __future__ import annotations
-
-import os
-from dataclasses import dataclass
-from typing import Any
-
-import requests
-
-
-@dataclass
-class HuggingFaceAdvisor:
-    enabled: bool = False
-    model: str = ""
-    timeout_seconds: int = 12
-    api_key: str = ""
-
-    def __post_init__(self) -> None:
-        if not self.api_key:
-            self.api_key = os.getenv("HF_API_KEY", "").strip()
-        if not self.model:
-            self.model = os.getenv("HF_MODEL", "").strip()
-
-    def available(self) -> bool:
-        return self.enabled and bool(self.api_key and self.model)
-
-    def _candidate_models(self) -> list[str]:
-        preferred = [
-            self.model,
-            "Qwen/Qwen2.5-7B-Instruct",
-            "Qwen/Qwen2.5-7B-Instruct-1M",
-            "google/gemma-2-2b-it",
-        ]
-        seen: set[str] = set()
-        candidates: list[str] = []
-        for item in preferred:
-            model = str(item or "").strip()
-            if not model or model in seen:
-                continue
-            seen.add(model)
-            candidates.append(model)
-        return candidates
-
-    def _router_chat(
-        self,
-        model: str,
-        question: str,
-        *,
-        context: str = "",
-        history: list[tuple[str, str]] | None = None,
-    ) -> tuple[str, Any]:
-        url = "https://router.huggingface.co/v1/chat/completions"
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-        messages: list[dict[str, str]] = [
-            {
-                "role": "system",
-                "content": (
-                    "Você é um assistente de trading para XAUUSD em português do Brasil. "
-                    "Responda de forma objetiva, prática e segura. "
-                    "Não invente resultados; se faltar dado, diga que não tem informação suficiente."
-                ),
-            }
-        ]
-        if context.strip():
-            messages.append({"role": "system", "content": f"Contexto atual do robô:\n{context.strip()}"})
-        if history:
-            for role, text in history[-6:]:
-                messages.append({"role": "user" if role == "user" else "assistant", "content": text})
-        messages.append({"role": "user", "content": question.strip()})
-
-        payload = {
-            "model": model,
-            "messages": messages,
-            "temperature": 0.3,
-            "max_tokens": 220,
-            "stream": False,
-        }
-        resp = requests.post(url, headers=headers, json=payload, timeout=self.timeout_seconds)
-        if resp.status_code == 404:
-            raise FileNotFoundError(f"Model or provider unavailable for {self.model}")
-        resp.raise_for_status()
-        data = resp.json()
-        answer = ""
-        if isinstance(data, dict):
-            choices = data.get("choices") or []
-            if choices and isinstance(choices, list):
-                first = choices[0] or {}
-                message = first.get("message") or {}
-                if isinstance(message, dict):
-                    answer = str(message.get("content") or "").strip()
-                if not answer:
-                    answer = str(first.get("text") or "").strip()
-        return answer, data
-
-    def _text_generation(self, prompt: str) -> dict[str, Any]:
-        url = f"https://api-inference.huggingface.co/models/{self.model}"
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-        payload = {
-            "inputs": prompt,
-            "parameters": {
-                "max_new_tokens": 220,
-                "temperature": 0.3,
-                "return_full_text": False,
-                "do_sample": True,
-            },
-            "options": {"wait_for_model": True},
-        }
-        resp = requests.post(url, headers=headers, json=payload, timeout=self.timeout_seconds)
-        if resp.status_code == 404:
-            raise FileNotFoundError(f"Model not available on api-inference for {self.model}")
-        resp.raise_for_status()
-        return resp.json()
-
-    def score_context(self, prompt: str) -> dict[str, Any]:
-        if not self.available():
-            return {
-                "score": 0.5,
-                "summary": "AI layer disabled; falling back to deterministic logic.",
-            }
-
-        try:
-            data = self._text_generation(prompt)
-            return {
-                "score": 0.7,
-                "summary": data if isinstance(data, str) else str(data)[:2000],
-            }
-        except Exception as exc:
-            return {
-                "score": 0.5,
-                "summary": f"AI call failed: {exc}",
-            }
-
-    def chat(
-        self,
-        question: str,
-        *,
-        context: str = "",
-        history: list[tuple[str, str]] | None = None,
-    ) -> dict[str, Any]:
-        if not self.available():
-            return {
-                "answer": "A camada de IA está desativada ou sem credenciais válidas.",
-                "raw": None,
-            }
-
-        try:
-            router_errors: list[str] = []
-            for model in self._candidate_models():
-                try:
-                    answer, data = self._router_chat(model, question, context=context, history=history)
-                    if answer.strip():
-                        return {"answer": answer.strip(), "raw": data, "backend": f"router:{model}"}
-                except Exception as exc:
-                    router_errors.append(f"{model}: {exc}")
-
-            prompt_parts = [
-                "Você é um assistente de trading para XAUUSD em português do Brasil.",
-                "Responda de forma objetiva, prática e segura.",
-                "Não invente resultados; se faltar dado, diga que não tem informação suficiente.",
-            ]
-            if context.strip():
-                prompt_parts.append("Contexto atual do robô:")
-                prompt_parts.append(context.strip())
-            if history:
-                prompt_parts.append("Histórico recente da conversa:")
-                for role, text in history[-6:]:
-                    prompt_parts.append(f"{role}: {text}")
-            prompt_parts.append(f"Pergunta: {question.strip()}")
-            prompt_parts.append("Resposta:")
-            prompt = "\n".join(prompt_parts)
-            data = self._text_generation(prompt)
-            answer = ""
-            if isinstance(data, list) and data:
-                first = data[0]
-                if isinstance(first, dict):
-                    answer = str(first.get("generated_text") or first.get("summary_text") or "")
-            elif isinstance(data, dict):
-                answer = str(data.get("generated_text") or data.get("summary_text") or data)
-            if not answer.strip():
-                answer = str(data)[:2000]
-            return {"answer": answer.strip(), "raw": data, "backend": f"text-generation:{self.model}"}
-        except Exception as exc:
-            detail = f"{exc}"
-            return {"answer": f"Falha ao consultar a IA: {detail}", "raw": None, "backend": "error"}
-</file>
-
 <file path="src/xauusd_ia_trader/notifier.py">
 from __future__ import annotations
 
@@ -1858,6 +1800,287 @@ class NotificationBus:
 
     def error(self, title: str, message: str, *, symbol: str | None = None, priority: int = 0) -> None:
         self.publish(NotificationEvent(title=title, message=message, priority=priority, symbol=symbol, kind="error"))
+</file>
+
+<file path="src/xauusd_ia_trader/ai.py">
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from typing import Any
+
+import requests
+
+
+# ---------------------------------------------------------------------------
+# Provider detection helpers
+# ---------------------------------------------------------------------------
+
+_GROQ_MODELS: set[str] = {
+    "llama-3.3-70b-versatile",
+    "llama-3.1-70b-versatile",
+    "llama-3.1-8b-instant",
+    "llama3-70b-8192",
+    "llama3-8b-8192",
+    "mixtral-8x7b-32768",
+    "gemma2-9b-it",
+    "gemma-7b-it",
+}
+
+_GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+_HF_ROUTER_URL = "https://router.huggingface.co/v1/chat/completions"
+_HF_INFERENCE_URL = "https://api-inference.huggingface.co/models/{model}"
+
+
+def _detect_provider(api_key: str, model: str) -> str:
+    """Return 'groq' or 'huggingface' based on key prefix and model name."""
+    if api_key.startswith("gsk_"):
+        return "groq"
+    if model in _GROQ_MODELS:
+        return "groq"
+    return "huggingface"
+
+
+# ---------------------------------------------------------------------------
+# Main advisor class
+# ---------------------------------------------------------------------------
+
+@dataclass
+class HuggingFaceAdvisor:
+    """AI advisor that transparently supports Groq and HuggingFace backends."""
+
+    enabled: bool = False
+    model: str = ""
+    timeout_seconds: int = 12
+    api_key: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.api_key:
+            self.api_key = os.getenv("HF_API_KEY", "").strip()
+        if not self.model:
+            self.model = os.getenv("HF_MODEL", "").strip()
+
+    # ------------------------------------------------------------------
+    # Public interface
+    # ------------------------------------------------------------------
+
+    def available(self) -> bool:
+        return self.enabled and bool(self.api_key and self.model)
+
+    @property
+    def provider(self) -> str:
+        return _detect_provider(self.api_key, self.model)
+
+    # ------------------------------------------------------------------
+    # Internal: OpenAI-compatible chat (Groq + HF Router)
+    # ------------------------------------------------------------------
+
+    def _openai_chat(
+        self,
+        url: str,
+        model: str,
+        question: str,
+        *,
+        context: str = "",
+        history: list[tuple[str, str]] | None = None,
+    ) -> tuple[str, Any]:
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        messages: list[dict[str, str]] = [
+            {
+                "role": "system",
+                "content": (
+                    "Você é um assistente de trading para XAUUSD em português do Brasil. "
+                    "Responda de forma objetiva, prática e segura. "
+                    "Não invente resultados; se faltar dado, diga que não tem informação suficiente."
+                ),
+            }
+        ]
+        if context.strip():
+            messages.append({"role": "system", "content": f"Contexto atual do robô:\n{context.strip()}"})
+        if history:
+            for role, text in history[-6:]:
+                messages.append({"role": "user" if role == "user" else "assistant", "content": text})
+        messages.append({"role": "user", "content": question.strip()})
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.3,
+            "max_tokens": 512,
+            "stream": False,
+        }
+        resp = requests.post(url, headers=headers, json=payload, timeout=self.timeout_seconds)
+        if resp.status_code in (404, 422):
+            raise FileNotFoundError(f"Modelo indisponível no provider: {model} (HTTP {resp.status_code})")
+        resp.raise_for_status()
+        data = resp.json()
+        answer = ""
+        if isinstance(data, dict):
+            choices = data.get("choices") or []
+            if choices and isinstance(choices, list):
+                first = choices[0] or {}
+                message = first.get("message") or {}
+                if isinstance(message, dict):
+                    answer = str(message.get("content") or "").strip()
+                if not answer:
+                    answer = str(first.get("text") or "").strip()
+        return answer, data
+
+    # ------------------------------------------------------------------
+    # Internal: HuggingFace text-generation fallback
+    # ------------------------------------------------------------------
+
+    def _hf_text_generation(self, prompt: str) -> dict[str, Any]:
+        url = _HF_INFERENCE_URL.format(model=self.model)
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        payload = {
+            "inputs": prompt,
+            "parameters": {
+                "max_new_tokens": 512,
+                "temperature": 0.3,
+                "return_full_text": False,
+                "do_sample": True,
+            },
+            "options": {"wait_for_model": True},
+        }
+        resp = requests.post(url, headers=headers, json=payload, timeout=self.timeout_seconds)
+        if resp.status_code == 404:
+            raise FileNotFoundError(f"Modelo não disponível na API HF: {self.model}")
+        resp.raise_for_status()
+        return resp.json()
+
+    # ------------------------------------------------------------------
+    # score_context (used by autonomous trader loop)
+    # ------------------------------------------------------------------
+
+    def score_context(self, prompt: str) -> dict[str, Any]:
+        if not self.available():
+            return {
+                "score": 0.5,
+                "summary": "Camada de IA desativada; usando lógica determinística.",
+            }
+        try:
+            if self.provider == "groq":
+                answer, _ = self._openai_chat(
+                    _GROQ_URL, self.model, prompt
+                )
+                return {"score": 0.7, "summary": answer or str(prompt)[:200]}
+            else:
+                data = self._hf_text_generation(prompt)
+                return {
+                    "score": 0.7,
+                    "summary": data if isinstance(data, str) else str(data)[:2000],
+                }
+        except Exception as exc:
+            return {"score": 0.5, "summary": f"Falha na IA: {exc}"}
+
+    # ------------------------------------------------------------------
+    # chat (used by GUI chat tab)
+    # ------------------------------------------------------------------
+
+    def chat(
+        self,
+        question: str,
+        *,
+        context: str = "",
+        history: list[tuple[str, str]] | None = None,
+    ) -> dict[str, Any]:
+        if not self.available():
+            return {
+                "answer": (
+                    "A camada de IA está desativada ou sem credenciais válidas. "
+                    "Configure a HF API Key e o modelo na aba IA e clique em 'Aplicar configuração IA'."
+                ),
+                "raw": None,
+                "backend": "disabled",
+            }
+
+        try:
+            if self.provider == "groq":
+                # Groq: single call, model already known
+                answer, data = self._openai_chat(
+                    _GROQ_URL,
+                    self.model,
+                    question,
+                    context=context,
+                    history=history,
+                )
+                if answer.strip():
+                    return {"answer": answer.strip(), "raw": data, "backend": f"groq:{self.model}"}
+                return {
+                    "answer": "A IA não retornou resposta. Tente novamente.",
+                    "raw": data,
+                    "backend": f"groq:{self.model}",
+                }
+
+            else:
+                # HuggingFace: try router first, then text-generation fallback
+                candidates = self._hf_candidate_models()
+                router_errors: list[str] = []
+
+                for model in candidates:
+                    try:
+                        answer, data = self._openai_chat(
+                            _HF_ROUTER_URL,
+                            model,
+                            question,
+                            context=context,
+                            history=history,
+                        )
+                        if answer.strip():
+                            return {"answer": answer.strip(), "raw": data, "backend": f"hf-router:{model}"}
+                    except Exception as exc:
+                        router_errors.append(f"{model}: {exc}")
+
+                # Fallback to text-generation
+                prompt_parts = [
+                    "Você é um assistente de trading para XAUUSD em português do Brasil.",
+                    "Responda de forma objetiva, prática e segura.",
+                ]
+                if context.strip():
+                    prompt_parts += ["Contexto:", context.strip()]
+                if history:
+                    for role, text in history[-4:]:
+                        prompt_parts.append(f"{role}: {text}")
+                prompt_parts += [f"Pergunta: {question.strip()}", "Resposta:"]
+                data = self._hf_text_generation("\n".join(prompt_parts))
+                answer = ""
+                if isinstance(data, list) and data:
+                    first = data[0]
+                    if isinstance(first, dict):
+                        answer = str(first.get("generated_text") or first.get("summary_text") or "")
+                elif isinstance(data, dict):
+                    answer = str(data.get("generated_text") or data.get("summary_text") or data)
+                if not answer.strip():
+                    answer = str(data)[:2000]
+                return {"answer": answer.strip(), "raw": data, "backend": f"hf-text-gen:{self.model}"}
+
+        except Exception as exc:
+            return {
+                "answer": f"Falha ao consultar a IA: {exc}",
+                "raw": None,
+                "backend": "error",
+            }
+
+    def _hf_candidate_models(self) -> list[str]:
+        preferred = [
+            self.model,
+            "Qwen/Qwen2.5-7B-Instruct",
+            "Qwen/Qwen2.5-7B-Instruct-1M",
+            "google/gemma-2-2b-it",
+        ]
+        seen: set[str] = set()
+        candidates: list[str] = []
+        for item in preferred:
+            m = str(item or "").strip()
+            if not m or m in seen:
+                continue
+            seen.add(m)
+            candidates.append(m)
+        return candidates
 </file>
 
 <file path="src/xauusd_ia_trader/execution.py">
@@ -2266,1242 +2489,6 @@ class ExecutionEngine:
                                 actions.append({"ticket": position.ticket, "action": "trail", "stop_loss": trail_sl, "result": result})
 
         return actions
-</file>
-
-<file path="src/xauusd_ia_trader/gui.py">
-from __future__ import annotations
-
-import queue
-import threading
-import time
-from datetime import UTC, datetime
-from pathlib import Path
-from typing import Any
-
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-
-import yaml
-
-from .config import load_config
-from .indicators import add_features
-from .models import TradeIdea
-from .notifier import CallbackSink, NotificationEvent
-from .trader import XAUUSDAutonomousTrader
-
-
-def _now_text() -> str:
-    return datetime.now(UTC).strftime("%H:%M:%S")
-
-
-def _to_float(value: str, default: float = 0.0) -> float:
-    try:
-        return float(str(value).replace(",", ".").strip())
-    except Exception:
-        return default
-
-
-def _to_int(value: str, default: int = 0) -> int:
-    try:
-        return int(float(str(value).strip()))
-    except Exception:
-        return default
-
-
-class ScrollableFrame(ttk.Frame):
-    def __init__(self, master: tk.Widget, **kwargs: Any) -> None:
-        super().__init__(master, **kwargs)
-        self.canvas = tk.Canvas(self, highlightthickness=0, bd=0, bg="#0b1220")
-        self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.inner = ttk.Frame(self.canvas, style="Card.TFrame")
-        self.window_id = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
-        self.inner.bind("<Configure>", lambda _event: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self.canvas.bind("<Configure>", lambda event: self.canvas.itemconfigure(self.window_id, width=event.width))
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
-        self.canvas.pack(side="left", fill="both", expand=True)
-        self.scrollbar.pack(side="right", fill="y")
-
-
-class XAUUSDControlPanel:
-    def __init__(self, config_path: Path) -> None:
-        self.config_path = config_path
-        self.config = load_config(config_path)
-
-        self.root = tk.Tk()
-        self.root.title("XAUUSD IA Trader")
-        self.root.geometry("1540x980")
-        self.root.minsize(1360, 860)
-        self.root.configure(bg="#0b1220")
-
-        self._lock = threading.Lock()
-        self._auto_running = False
-        self._auto_thread: threading.Thread | None = None
-        self._event_queue: queue.Queue[NotificationEvent] = queue.Queue()
-        self._status_queue: queue.Queue[str] = queue.Queue()
-        self.chat_history: list[tuple[str, str]] = []
-        self.toast_var = tk.StringVar(value="")
-        self.toast_window: tk.Toplevel | None = None
-
-        self._build_style()
-        self._build_vars()
-        self.trader = self._build_trader()
-        self._build_layout()
-        self._bind_shortcuts()
-        self._refresh_all()
-        self.root.after(250, self._poll_queues)
-        self.root.after(1000, self._tick)
-
-    def _build_style(self) -> None:
-        style = ttk.Style(self.root)
-        try:
-            style.theme_use("clam")
-        except tk.TclError:
-            pass
-
-        style.configure(".", font=("Segoe UI", 10))
-        style.configure("App.TFrame", background="#0b1220")
-        style.configure("Card.TFrame", background="#111827")
-        style.configure("Dark.TLabelframe", background="#111827", foreground="#e5e7eb")
-        style.configure("Dark.TLabelframe.Label", background="#111827", foreground="#93c5fd", font=("Segoe UI Semibold", 10))
-        style.configure("Dark.TLabel", background="#111827", foreground="#e5e7eb")
-        style.configure("Title.TLabel", background="#0b1220", foreground="#f8fafc", font=("Segoe UI Semibold", 18))
-        style.configure("Subtitle.TLabel", background="#0b1220", foreground="#94a3b8", font=("Segoe UI", 10))
-        style.configure("MetricTitle.TLabel", background="#111827", foreground="#94a3b8", font=("Segoe UI", 9))
-        style.configure("MetricValue.TLabel", background="#111827", foreground="#f8fafc", font=("Segoe UI Semibold", 18))
-        style.configure("Section.TLabel", background="#0b1220", foreground="#cbd5e1", font=("Segoe UI Semibold", 12))
-        style.configure("Accent.TButton", padding=(12, 8), background="#2563eb", foreground="white")
-        style.map("Accent.TButton", background=[("active", "#1d4ed8")])
-        style.configure("Danger.TButton", padding=(12, 8), background="#b91c1c", foreground="white")
-        style.map("Danger.TButton", background=[("active", "#991b1b")])
-        style.configure("Success.TButton", padding=(12, 8), background="#15803d", foreground="white")
-        style.map("Success.TButton", background=[("active", "#166534")])
-        style.configure("Info.TButton", padding=(12, 8), background="#0f766e", foreground="white")
-        style.map("Info.TButton", background=[("active", "#115e59")])
-        style.configure(
-            "Dark.TEntry",
-            fieldbackground="#0f172a",
-            background="#0f172a",
-            foreground="#f8fafc",
-            insertcolor="#f8fafc",
-        )
-        style.configure(
-            "Dark.TCombobox",
-            fieldbackground="#111827",
-            background="#111827",
-            foreground="#f8fafc",
-            selectforeground="#f8fafc",
-            selectbackground="#2563eb",
-            arrowcolor="#e5e7eb",
-        )
-        style.map(
-            "Dark.TCombobox",
-            fieldbackground=[("readonly", "#111827"), ("active", "#111827")],
-            background=[("readonly", "#111827"), ("active", "#111827")],
-            foreground=[("readonly", "#f8fafc"), ("active", "#f8fafc")],
-        )
-        self.root.option_add("*TCombobox*Listbox.background", "#111827")
-        self.root.option_add("*TCombobox*Listbox.foreground", "#f8fafc")
-        self.root.option_add("*TCombobox*Listbox.selectBackground", "#2563eb")
-        self.root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
-
-    def _build_vars(self) -> None:
-        app = self.config.get("app", {})
-        broker = self.config.get("broker", {})
-        risk = self.config.get("risk", {})
-        ai = self.config.get("ai", {})
-        notifications = self.config.get("notifications", {})
-
-        self.symbol_var = tk.StringVar(value=str(app.get("symbol", "XAUUSD")))
-        self.mode_var = tk.StringVar(value=str(app.get("mode", "live")).lower())
-        self.cycle_var = tk.StringVar(value=str(app.get("cycle_seconds", 30)))
-        self.position_state_var = tk.StringVar(value=str(app.get("position_state_path", "runtime/position_state.json")))
-
-        self.terminal_path_var = tk.StringVar(value=str(broker.get("terminal_path", "")))
-        self.login_var = tk.StringVar(value=str(broker.get("login", "")))
-        self.password_var = tk.StringVar(value=str(broker.get("password", "")))
-        self.server_var = tk.StringVar(value=str(broker.get("server", "")))
-        self.deviation_var = tk.StringVar(value=str(broker.get("deviation", 20)))
-        self.magic_var = tk.StringVar(value=str(broker.get("magic", 2401001)))
-
-        self.risk_var = tk.StringVar(value=f"{float(risk.get('risk_per_trade', 0.005)) * 100:.2f}")
-        self.daily_loss_var = tk.StringVar(value=f"{float(risk.get('daily_loss_limit', 0.02)) * 100:.2f}")
-        self.max_consecutive_var = tk.StringVar(value=str(risk.get("max_consecutive_losses", 3)))
-        self.max_trades_var = tk.StringVar(value=str(risk.get("max_trades_per_day", 5)))
-        self.max_open_var = tk.StringVar(value=str(risk.get("max_open_positions", 1)))
-        self.max_spread_var = tk.StringVar(value=str(risk.get("max_spread_points", 80)))
-        self.session_start_var = tk.StringVar(value=str(risk.get("session_start", "07:00")))
-        self.session_end_var = tk.StringVar(value=str(risk.get("session_end", "20:30")))
-        self.be_var = tk.StringVar(value=str(risk.get("breakeven_trigger_r", 0.9)))
-        self.partial_var = tk.StringVar(value=str(risk.get("partial_take_profit_r", 1.0)))
-        self.final_tp_var = tk.StringVar(value=str(risk.get("final_take_profit_r", 2.0)))
-        self.partial_ratio_var = tk.StringVar(value=str(risk.get("partial_close_ratio", 0.5)))
-        self.trailing_start_var = tk.StringVar(value=str(risk.get("trailing_start_r", 1.2)))
-        self.trailing_atr_var = tk.StringVar(value=str(risk.get("trailing_atr_mult", 1.2)))
-        self.trailing_step_var = tk.StringVar(value=str(risk.get("trailing_step_points", 10.0)))
-        self.min_rr_var = tk.StringVar(value=str(risk.get("min_rr", 1.2)))
-
-        self.ai_enabled_var = tk.BooleanVar(value=bool(ai.get("enabled", False)))
-        self.ai_model_var = tk.StringVar(value=str(ai.get("hf_model", "")))
-        self.queue_file_var = tk.StringVar(value=str(notifications.get("queue_file", "xauusd_push_queue.txt")))
-
-        self.side_var = tk.StringVar(value="buy")
-        self.manual_volume_var = tk.StringVar(value="")
-        self.manual_auto_sl_var = tk.StringVar(value="-")
-        self.manual_auto_tp_var = tk.StringVar(value="-")
-        self.manual_lot_preview_var = tk.StringVar(value="Lote sugerido: -")
-        self.current_price_var = tk.StringVar(value="-")
-        self.spread_var = tk.StringVar(value="-")
-
-        self.account_balance_var = tk.StringVar(value="-")
-        self.account_equity_var = tk.StringVar(value="-")
-        self.account_free_margin_var = tk.StringVar(value="-")
-        self.account_margin_level_var = tk.StringVar(value="-")
-        self.daily_pnl_var = tk.StringVar(value="-")
-        self.open_pnl_var = tk.StringVar(value="-")
-        self.open_positions_var = tk.StringVar(value="-")
-        self.trades_today_var = tk.StringVar(value="-")
-        self.session_status_var = tk.StringVar(value="-")
-        self.lock_status_var = tk.StringVar(value="-")
-        self.mode_status_var = tk.StringVar(value="Live" if self.mode_var.get() == "live" else "Paper")
-        self.connection_var = tk.StringVar(value="Desconectado")
-        self.status_var = tk.StringVar(value="Pronto para operar")
-        self.last_result_var = tk.StringVar(value="Pronto")
-        self.regime_var = tk.StringVar(value="-")
-
-        self.metric_vars: dict[str, tk.StringVar] = {}
-        self.chat_status_var = tk.StringVar(value="IA pronta")
-        self.chat_question_var = tk.StringVar(value="")
-
-    def _build_trader(self) -> XAUUSDAutonomousTrader:
-        trader = XAUUSDAutonomousTrader(self.config)
-        trader.notifier.sinks.append(CallbackSink(self._handle_notification))
-        return trader
-
-    def _build_layout(self) -> None:
-        outer = ttk.Frame(self.root, style="App.TFrame", padding=16)
-        outer.pack(fill="both", expand=True)
-
-        header = ttk.Frame(outer, style="App.TFrame")
-        header.pack(fill="x", pady=(0, 12))
-        ttk.Label(header, text="XAUUSD IA Trader", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(
-            header,
-            text="Painel operacional com controle manual, automação, risco, posições, IA e logs em tempo real.",
-            style="Subtitle.TLabel",
-        ).pack(anchor="w", pady=(4, 0))
-
-        toolbar = ttk.Frame(outer, style="App.TFrame")
-        toolbar.pack(fill="x", pady=(0, 12))
-        for label, command, style_name in [
-            ("Aplicar", self._apply_settings, "Accent.TButton"),
-            ("Iniciar Auto", self._start_auto, "Success.TButton"),
-            ("Parar Auto", self._stop_auto, "Danger.TButton"),
-            ("Atualizar", self._refresh_now, "Info.TButton"),
-            ("Fechar Todas", self._close_all_positions, "Danger.TButton"),
-        ]:
-            ttk.Button(toolbar, text=label, command=command, style=style_name).pack(side="left", padx=(0, 10))
-        ttk.Label(toolbar, textvariable=self.status_var, style="Section.TLabel").pack(side="right")
-        self.toast_label = ttk.Label(outer, textvariable=self.toast_var, style="Subtitle.TLabel")
-        self.toast_label.pack(fill="x", pady=(0, 8))
-
-        metrics = ttk.Frame(outer, style="App.TFrame")
-        metrics.pack(fill="x", pady=(0, 14))
-        cards = [
-            ("balance", "Saldo"),
-            ("equity", "Capital líquido"),
-            ("free_margin", "Margem livre"),
-            ("daily_pnl", "PnL do dia"),
-            ("open_pnl", "PnL aberto"),
-            ("open_positions", "Posições"),
-        ]
-        for idx, (key, title) in enumerate(cards):
-            card = ttk.Frame(metrics, style="Card.TFrame", padding=14)
-            card.grid(row=0, column=idx, padx=6, sticky="nsew")
-            metrics.columnconfigure(idx, weight=1)
-            ttk.Label(card, text=title, style="MetricTitle.TLabel").pack(anchor="w")
-            var = tk.StringVar(value="-")
-            self.metric_vars[key] = var
-            ttk.Label(card, textvariable=var, style="MetricValue.TLabel").pack(anchor="w", pady=(6, 0))
-
-        self.notebook = ttk.Notebook(outer)
-        self.notebook.pack(fill="both", expand=True)
-        self.dashboard_tab = ttk.Frame(self.notebook, style="App.TFrame")
-        self.manual_tab = ttk.Frame(self.notebook, style="App.TFrame")
-        self.positions_tab = ttk.Frame(self.notebook, style="App.TFrame")
-        self.settings_tab = ttk.Frame(self.notebook, style="App.TFrame")
-        self.ai_tab = ttk.Frame(self.notebook, style="App.TFrame")
-        self.logs_tab = ttk.Frame(self.notebook, style="App.TFrame")
-
-        self.notebook.add(self.dashboard_tab, text="Dashboard")
-        self.notebook.add(self.manual_tab, text="Manual")
-        self.notebook.add(self.positions_tab, text="Posições")
-        self.notebook.add(self.settings_tab, text="Config")
-        self.notebook.add(self.ai_tab, text="IA")
-        self.notebook.add(self.logs_tab, text="Logs")
-
-        self._build_dashboard_tab()
-        self._build_manual_tab()
-        self._build_positions_tab()
-        self._build_settings_tab()
-        self._build_ai_tab()
-        self._build_logs_tab()
-        self._build_status_bar(outer)
-
-    def _build_status_bar(self, parent: ttk.Frame) -> None:
-        bar = ttk.Frame(parent, style="Card.TFrame", padding=(12, 8))
-        bar.pack(fill="x", pady=(10, 0))
-        left = ttk.Frame(bar, style="Card.TFrame")
-        left.pack(side="left", fill="x", expand=True)
-        for label, var in [
-            ("Conexão", self.connection_var),
-            ("Modo", self.mode_status_var),
-            ("Regime", self.regime_var),
-            ("Sessão", self.session_status_var),
-            ("Bloqueio", self.lock_status_var),
-        ]:
-            box = ttk.Frame(left, style="Card.TFrame")
-            box.pack(side="left", padx=(0, 20))
-            ttk.Label(box, text=f"{label}:", style="MetricTitle.TLabel").pack(anchor="w")
-            ttk.Label(box, textvariable=var, style="Dark.TLabel").pack(anchor="w")
-        ttk.Label(bar, textvariable=self.last_result_var, style="Dark.TLabel").pack(side="right")
-
-    def _build_dashboard_tab(self) -> None:
-        outer = ttk.Frame(self.dashboard_tab, style="App.TFrame", padding=12)
-        outer.pack(fill="both", expand=True)
-
-        left = ttk.Frame(outer, style="App.TFrame")
-        left.pack(side="left", fill="both", expand=True)
-        right = ttk.Frame(outer, style="App.TFrame", width=360)
-        right.pack(side="right", fill="y", padx=(12, 0))
-
-        perf = ttk.LabelFrame(left, text="Performance", style="Dark.TLabelframe", padding=12)
-        perf.pack(fill="x", pady=(0, 12))
-        perf_grid = ttk.Frame(perf, style="Card.TFrame")
-        perf_grid.pack(fill="x")
-        perf_items = [
-            ("day_pnl", "Lucro do dia"),
-            ("open_pnl", "PnL aberto"),
-            ("trades_today", "Trades hoje"),
-            ("consecutive_losses", "Perdas seguidas"),
-            ("daily_limit", "Limite diário"),
-            ("risk_trade", "Risco por trade"),
-        ]
-        self.performance_vars: dict[str, tk.StringVar] = {}
-        for idx, (key, title) in enumerate(perf_items):
-            cell = ttk.Frame(perf_grid, style="Card.TFrame", padding=10)
-            cell.grid(row=idx // 3, column=idx % 3, padx=6, pady=6, sticky="nsew")
-            perf_grid.columnconfigure(idx % 3, weight=1)
-            ttk.Label(cell, text=title, style="MetricTitle.TLabel").pack(anchor="w")
-            var = tk.StringVar(value="-")
-            self.performance_vars[key] = var
-            ttk.Label(cell, textvariable=var, style="MetricValue.TLabel").pack(anchor="w", pady=(4, 0))
-
-        market = ttk.LabelFrame(left, text="Mercado e sessão", style="Dark.TLabelframe", padding=12)
-        market.pack(fill="x")
-        for label, var in [
-            ("Preço atual", self.current_price_var),
-            ("Spread atual", self.spread_var),
-            ("Posições abertas", self.open_positions_var),
-            ("Status da conta", self.connection_var),
-        ]:
-            row = ttk.Frame(market, style="Card.TFrame")
-            row.pack(fill="x", pady=4)
-            ttk.Label(row, text=label, style="MetricTitle.TLabel", width=18).pack(side="left")
-            ttk.Label(row, textvariable=var, style="Dark.TLabel").pack(side="left")
-
-        quick = ttk.LabelFrame(right, text="Ações rápidas", style="Dark.TLabelframe", padding=12)
-        quick.pack(fill="both", expand=True)
-        ttk.Label(
-            quick,
-            text="O botão Iniciar Auto mantém o ciclo contínuo; as travas de sessão e risco continuam valendo.",
-            style="Dark.TLabel",
-            wraplength=320,
-            justify="left",
-        ).pack(anchor="w", pady=(0, 10))
-        ttk.Button(quick, text="Atualizar agora", command=self._refresh_now, style="Info.TButton").pack(fill="x", pady=4)
-        ttk.Button(quick, text="Abrir compra manual", command=lambda: self._manual_trade("buy"), style="Success.TButton").pack(fill="x", pady=4)
-        ttk.Button(quick, text="Abrir venda manual", command=lambda: self._manual_trade("sell"), style="Danger.TButton").pack(fill="x", pady=4)
-        ttk.Button(quick, text="Fechar todas", command=self._close_all_positions, style="Danger.TButton").pack(fill="x", pady=4)
-
-    def _build_manual_tab(self) -> None:
-        outer = ttk.Frame(self.manual_tab, style="App.TFrame", padding=12)
-        outer.pack(fill="both", expand=True)
-
-        left = ttk.LabelFrame(outer, text="Ordem manual", style="Dark.TLabelframe", padding=14)
-        left.pack(side="left", fill="both", expand=True)
-        right = ttk.LabelFrame(outer, text="Resumo", style="Dark.TLabelframe", padding=14)
-        right.pack(side="right", fill="y", padx=(12, 0))
-
-        rows: list[tuple[str, tk.Variable]] = [
-            ("Símbolo", self.symbol_var),
-            ("Lado", self.side_var),
-            ("Modo", self.mode_var),
-            ("Preço atual", self.current_price_var),
-            ("Lote manual", self.manual_volume_var),
-            ("SL automático", self.manual_auto_sl_var),
-            ("TP automático", self.manual_auto_tp_var),
-            ("Lote sugerido", self.manual_lot_preview_var),
-        ]
-
-        for idx, (label, var) in enumerate(rows):
-            row = ttk.Frame(left, style="Card.TFrame")
-            row.pack(fill="x", pady=5)
-            ttk.Label(row, text=label, style="MetricTitle.TLabel", width=18).pack(side="left")
-            if label == "Lado":
-                widget = ttk.Combobox(row, textvariable=var, values=["buy", "sell"], state="readonly", style="Dark.TCombobox")
-                widget.pack(side="left", fill="x", expand=True)
-            elif label == "Modo":
-                widget = ttk.Combobox(row, textvariable=var, values=["live", "paper"], state="readonly", style="Dark.TCombobox")
-                widget.pack(side="left", fill="x", expand=True)
-            elif label in {"Preço atual", "SL automático", "TP automático", "Lote sugerido"}:
-                entry = ttk.Entry(row, textvariable=var, style="Dark.TEntry", state="readonly")
-                entry.pack(side="left", fill="x", expand=True)
-            else:
-                entry = ttk.Entry(row, textvariable=var, style="Dark.TEntry")
-                entry.pack(side="left", fill="x", expand=True)
-
-        actions = ttk.Frame(left, style="Card.TFrame")
-        actions.pack(fill="x", pady=(14, 0))
-        ttk.Button(actions, text="Abrir Compra", command=lambda: self._manual_trade("buy"), style="Success.TButton").pack(side="left", padx=(0, 8))
-        ttk.Button(actions, text="Abrir Venda", command=lambda: self._manual_trade("sell"), style="Danger.TButton").pack(side="left", padx=(0, 8))
-        ttk.Button(actions, text="Atualizar preço", command=self._refresh_price_only, style="Info.TButton").pack(side="left")
-
-        ttk.Label(
-            left,
-            text="As ordens manuais são abertas a mercado com SL e TP automáticos em RR 1:1.",
-            style="Subtitle.TLabel",
-            wraplength=760,
-            justify="left",
-        ).pack(anchor="w", pady=(10, 0))
-
-        for label, var in [
-            ("Saldo", self.account_balance_var),
-            ("Equity", self.account_equity_var),
-            ("Margem livre", self.account_free_margin_var),
-            ("Margem %", self.account_margin_level_var),
-            ("PnL do dia", self.daily_pnl_var),
-            ("PnL aberto", self.open_pnl_var),
-            ("Trades hoje", self.trades_today_var),
-            ("Risco por trade", self.risk_var),
-        ]:
-            row = ttk.Frame(right, style="Card.TFrame")
-            row.pack(fill="x", pady=4)
-            ttk.Label(row, text=label, style="MetricTitle.TLabel", width=18).pack(side="left")
-            ttk.Label(row, textvariable=var, style="Dark.TLabel").pack(side="left")
-
-    def _build_positions_tab(self) -> None:
-        outer = ttk.Frame(self.positions_tab, style="App.TFrame", padding=12)
-        outer.pack(fill="both", expand=True)
-        header = ttk.Frame(outer, style="App.TFrame")
-        header.pack(fill="x", pady=(0, 10))
-        ttk.Label(header, text="Posições abertas", style="Section.TLabel").pack(side="left")
-        ttk.Button(header, text="Fechar Todas", command=self._close_all_positions, style="Danger.TButton").pack(side="right")
-        ttk.Button(header, text="Atualizar", command=self._refresh_now, style="Info.TButton").pack(side="right", padx=(0, 8))
-        self.positions_scroll = ScrollableFrame(outer)
-        self.positions_scroll.pack(fill="both", expand=True)
-
-    def _build_settings_tab(self) -> None:
-        outer = ttk.Frame(self.settings_tab, style="App.TFrame", padding=12)
-        outer.pack(fill="both", expand=True)
-
-        columns = ttk.Frame(outer, style="App.TFrame")
-        columns.pack(fill="both", expand=True)
-        left = ttk.LabelFrame(columns, text="Operação", style="Dark.TLabelframe", padding=14)
-        left.pack(side="left", fill="both", expand=True)
-        middle = ttk.LabelFrame(columns, text="Risco e sessão", style="Dark.TLabelframe", padding=14)
-        middle.pack(side="left", fill="both", expand=True, padx=12)
-        right = ttk.LabelFrame(columns, text="Conexão e IA", style="Dark.TLabelframe", padding=14)
-        right.pack(side="left", fill="both", expand=True)
-
-        self._settings_form(
-            left,
-            [
-                ("Símbolo", self.symbol_var),
-                ("Modo", self.mode_var),
-                ("Cycle seconds", self.cycle_var),
-                ("Position state", self.position_state_var),
-            ],
-        )
-        self._settings_form(
-            middle,
-            [
-                ("Risco por trade %", self.risk_var),
-                ("Limite diário %", self.daily_loss_var),
-                ("Máx. perdas seguidas", self.max_consecutive_var),
-                ("Máx. trades/dia", self.max_trades_var),
-                ("Máx. posições", self.max_open_var),
-                ("Spread máximo", self.max_spread_var),
-                ("Início sessão", self.session_start_var),
-                ("Fim sessão", self.session_end_var),
-                ("Break-even R", self.be_var),
-                ("Parcial R", self.partial_var),
-                ("TP final R", self.final_tp_var),
-                ("Parcial %", self.partial_ratio_var),
-                ("Trailing start R", self.trailing_start_var),
-                ("Trailing ATR mult", self.trailing_atr_var),
-                ("Trailing step pts", self.trailing_step_var),
-                ("RR mínimo", self.min_rr_var),
-            ],
-        )
-        self._settings_form(
-            right,
-            [
-                ("Terminal MT5", self.terminal_path_var),
-                ("Login", self.login_var),
-                ("Senha", self.password_var),
-                ("Servidor", self.server_var),
-                ("Desvio", self.deviation_var),
-                ("Magic", self.magic_var),
-                ("Arquivo fila", self.queue_file_var),
-                ("IA habilitada", self.ai_enabled_var),
-                ("Modelo HF", self.ai_model_var),
-            ],
-        )
-
-        bottom = ttk.Frame(outer, style="App.TFrame")
-        bottom.pack(fill="x", pady=(12, 0))
-        ttk.Button(bottom, text="Salvar e aplicar", command=self._apply_settings, style="Accent.TButton").pack(side="left")
-        ttk.Button(bottom, text="Carregar arquivo...", command=self._load_config_file_dialog, style="Info.TButton").pack(side="left", padx=(8, 0))
-
-    def _build_ai_tab(self) -> None:
-        outer = ttk.Frame(self.ai_tab, style="App.TFrame", padding=12)
-        outer.pack(fill="both", expand=True)
-
-        header = ttk.Frame(outer, style="App.TFrame")
-        header.pack(fill="x", pady=(0, 10))
-        ttk.Label(header, text="Chat da IA", style="Section.TLabel").pack(side="left")
-        ttk.Label(header, textvariable=self.chat_status_var, style="Subtitle.TLabel").pack(side="right")
-
-        body = ttk.Frame(outer, style="App.TFrame")
-        body.pack(fill="both", expand=True)
-        left = ttk.LabelFrame(body, text="Conversa", style="Dark.TLabelframe", padding=12)
-        left.pack(side="left", fill="both", expand=True)
-        right = ttk.LabelFrame(body, text="Atalhos", style="Dark.TLabelframe", padding=12)
-        right.pack(side="right", fill="y", padx=(12, 0))
-
-        self.chat_text = tk.Text(
-            left,
-            bg="#0f172a",
-            fg="#e5e7eb",
-            insertbackground="#e5e7eb",
-            relief="flat",
-            wrap="word",
-            height=24,
-            font=("Consolas", 10),
-        )
-        self.chat_text.pack(fill="both", expand=True)
-        self.chat_text.configure(state="disabled")
-
-        input_row = ttk.Frame(left, style="Card.TFrame")
-        input_row.pack(fill="x", pady=(10, 0))
-        entry = ttk.Entry(input_row, textvariable=self.chat_question_var, style="Dark.TEntry")
-        entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
-        entry.bind("<Return>", lambda _event: self._send_chat_question())
-        entry.bind("<KP_Enter>", lambda _event: self._send_chat_question())
-        ttk.Button(input_row, text="Enviar", command=self._send_chat_question, style="Accent.TButton").pack(side="left")
-        self.chat_input = entry
-        ttk.Button(input_row, text="Limpar conversa", command=self._clear_chat, style="Info.TButton").pack(side="left", padx=(8, 0))
-
-        for label, question in [
-            ("Resumo do robô", "Explique o estado atual do robô e os principais riscos."),
-            ("Estratégia", "Resuma a estratégia de entrada, saída e risco em linguagem simples."),
-            ("Posições", "Analise as posições abertas e diga o que está acontecendo."),
-        ]:
-            ttk.Button(right, text=label, command=lambda q=question: self._preset_chat_question(q), style="Info.TButton").pack(fill="x", pady=4)
-
-        ttk.Label(
-            right,
-            text="A IA responde perguntas sobre operação, estratégia e contexto atual do sistema.",
-            style="Subtitle.TLabel",
-            wraplength=260,
-            justify="left",
-        ).pack(anchor="w", pady=(10, 0))
-
-    def _build_logs_tab(self) -> None:
-        outer = ttk.Frame(self.logs_tab, style="App.TFrame", padding=12)
-        outer.pack(fill="both", expand=True)
-        header = ttk.Frame(outer, style="App.TFrame")
-        header.pack(fill="x", pady=(0, 8))
-        ttk.Label(header, text="Eventos e logs em tempo real", style="Section.TLabel").pack(side="left")
-        ttk.Button(header, text="Limpar", command=self._clear_logs, style="Info.TButton").pack(side="right")
-        self.log_text = tk.Text(
-            outer,
-            bg="#0f172a",
-            fg="#e5e7eb",
-            insertbackground="#e5e7eb",
-            relief="flat",
-            height=24,
-            wrap="word",
-            font=("Consolas", 10),
-        )
-        self.log_text.pack(fill="both", expand=True)
-        self.log_text.tag_configure("info", foreground="#cbd5e1")
-        self.log_text.tag_configure("warn", foreground="#fbbf24")
-        self.log_text.tag_configure("error", foreground="#f87171")
-        self.log_text.configure(state="disabled")
-
-    def _settings_form(self, parent: ttk.LabelFrame, fields: list[tuple[str, tk.Variable]]) -> None:
-        for label, var in fields:
-            row = ttk.Frame(parent, style="Card.TFrame")
-            row.pack(fill="x", pady=4)
-            ttk.Label(row, text=label, style="MetricTitle.TLabel", width=20).pack(side="left")
-            if isinstance(var, tk.BooleanVar):
-                ttk.Checkbutton(row, variable=var).pack(side="left", anchor="w")
-            elif label == "Modo":
-                ttk.Combobox(row, textvariable=var, values=["live", "paper"], state="readonly", style="Dark.TCombobox").pack(side="left", fill="x", expand=True)
-            else:
-                ttk.Entry(row, textvariable=var, style="Dark.TEntry").pack(side="left", fill="x", expand=True)
-
-    def _bind_shortcuts(self) -> None:
-        self.root.bind("<F5>", lambda _event: self._refresh_now())
-        self.root.bind("<F9>", lambda _event: self._manual_trade("buy"))
-        self.root.bind("<F10>", lambda _event: self._manual_trade("sell"))
-        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
-
-    def _handle_notification(self, event: NotificationEvent) -> None:
-        self._event_queue.put(event)
-
-    def _append_log(self, text: str, tag: str = "info") -> None:
-        self.log_text.configure(state="normal")
-        self.log_text.insert("end", text + "\n", tag)
-        self.log_text.see("end")
-        self.log_text.configure(state="disabled")
-
-    def _append_chat(self, role: str, text: str) -> None:
-        self.chat_text.configure(state="normal")
-        prefix = "Você" if role == "user" else "IA"
-        self.chat_text.insert("end", f"{prefix}: {text}\n\n")
-        self.chat_text.see("end")
-        self.chat_text.configure(state="disabled")
-
-    def _clear_chat(self) -> None:
-        self.chat_history.clear()
-        self.chat_text.configure(state="normal")
-        self.chat_text.delete("1.0", "end")
-        self.chat_text.configure(state="disabled")
-        self.chat_question_var.set("")
-        self.chat_status_var.set("IA pronta")
-        self._show_toast("Conversa limpa", kind="info")
-
-    def _clear_logs(self) -> None:
-        self.log_text.configure(state="normal")
-        self.log_text.delete("1.0", "end")
-        self.log_text.configure(state="disabled")
-
-    def _refresh_now(self) -> None:
-        self._refresh_all()
-        self._append_log(f"[{_now_text()}] atualização manual concluída", "info")
-
-    def _refresh_price_only(self) -> None:
-        self._update_market_data()
-        self._append_log(f"[{_now_text()}] preço atualizado", "info")
-
-    def _load_config_file_dialog(self) -> None:
-        selected = filedialog.askopenfilename(
-            title="Selecionar configuração",
-            filetypes=[("YAML", "*.yaml *.yml"), ("Todos os arquivos", "*.*")],
-            initialdir=str(self.config_path.parent),
-        )
-        if not selected:
-            return
-        self.config_path = Path(selected)
-        self.config = load_config(self.config_path)
-        self._set_vars_from_config()
-        self.trader = self._build_trader()
-        self._refresh_all()
-        self._append_log(f"[{_now_text()}] configuração carregada de {self.config_path}", "info")
-
-    def _set_vars_from_config(self) -> None:
-        app = self.config.get("app", {})
-        broker = self.config.get("broker", {})
-        risk = self.config.get("risk", {})
-        ai = self.config.get("ai", {})
-        notifications = self.config.get("notifications", {})
-
-        self.symbol_var.set(str(app.get("symbol", "XAUUSD")))
-        self.mode_var.set(str(app.get("mode", "live")).lower())
-        self.cycle_var.set(str(app.get("cycle_seconds", 30)))
-        self.position_state_var.set(str(app.get("position_state_path", "runtime/position_state.json")))
-
-        self.terminal_path_var.set(str(broker.get("terminal_path", "")))
-        self.login_var.set(str(broker.get("login", "")))
-        self.password_var.set(str(broker.get("password", "")))
-        self.server_var.set(str(broker.get("server", "")))
-        self.deviation_var.set(str(broker.get("deviation", 20)))
-        self.magic_var.set(str(broker.get("magic", 2401001)))
-
-        self.risk_var.set(f"{float(risk.get('risk_per_trade', 0.005)) * 100:.2f}")
-        self.daily_loss_var.set(f"{float(risk.get('daily_loss_limit', 0.02)) * 100:.2f}")
-        self.max_consecutive_var.set(str(risk.get("max_consecutive_losses", 3)))
-        self.max_trades_var.set(str(risk.get("max_trades_per_day", 5)))
-        self.max_open_var.set(str(risk.get("max_open_positions", 1)))
-        self.max_spread_var.set(str(risk.get("max_spread_points", 80)))
-        self.session_start_var.set(str(risk.get("session_start", "07:00")))
-        self.session_end_var.set(str(risk.get("session_end", "20:30")))
-        self.be_var.set(str(risk.get("breakeven_trigger_r", 0.9)))
-        self.partial_var.set(str(risk.get("partial_take_profit_r", 1.0)))
-        self.final_tp_var.set(str(risk.get("final_take_profit_r", 2.0)))
-        self.partial_ratio_var.set(str(risk.get("partial_close_ratio", 0.5)))
-        self.trailing_start_var.set(str(risk.get("trailing_start_r", 1.2)))
-        self.trailing_atr_var.set(str(risk.get("trailing_atr_mult", 1.2)))
-        self.trailing_step_var.set(str(risk.get("trailing_step_points", 10.0)))
-        self.min_rr_var.set(str(risk.get("min_rr", 1.2)))
-
-        self.ai_enabled_var.set(bool(ai.get("enabled", False)))
-        self.ai_model_var.set(str(ai.get("hf_model", "")))
-        self.queue_file_var.set(str(notifications.get("queue_file", "xauusd_push_queue.txt")))
-        self.mode_status_var.set("Live" if self.mode_var.get().lower() == "live" else "Paper")
-
-    def _collect_config_from_form(self) -> dict[str, Any]:
-        return {
-            "app": {
-                "symbol": self.symbol_var.get().strip() or "XAUUSD",
-                "timeframes": list(self.config.get("app", {}).get("timeframes", ["M1", "M5", "M15"])),
-                "mode": self.mode_var.get().strip().lower() or "live",
-                "cycle_seconds": max(1, _to_int(self.cycle_var.get(), 30)),
-                "position_state_path": self.position_state_var.get().strip() or "runtime/position_state.json",
-            },
-            "broker": {
-                "terminal_path": self.terminal_path_var.get().strip(),
-                "login": _to_int(self.login_var.get(), 0),
-                "password": self.password_var.get(),
-                "server": self.server_var.get().strip(),
-                "deviation": _to_int(self.deviation_var.get(), 20),
-                "magic": _to_int(self.magic_var.get(), 2401001),
-            },
-            "risk": {
-                "risk_per_trade": max(0.0, _to_float(self.risk_var.get(), 0.5) / 100.0),
-                "daily_loss_limit": max(0.0, _to_float(self.daily_loss_var.get(), 2.0) / 100.0),
-                "max_consecutive_losses": max(1, _to_int(self.max_consecutive_var.get(), 3)),
-                "max_trades_per_day": max(1, _to_int(self.max_trades_var.get(), 5)),
-                "max_open_positions": max(1, _to_int(self.max_open_var.get(), 1)),
-                "max_spread_points": max(1.0, _to_float(self.max_spread_var.get(), 80.0)),
-                "breakeven_trigger_r": max(0.1, _to_float(self.be_var.get(), 0.9)),
-                "partial_take_profit_r": max(0.1, _to_float(self.partial_var.get(), 1.0)),
-                "final_take_profit_r": max(0.1, _to_float(self.final_tp_var.get(), 2.0)),
-                "partial_close_ratio": min(1.0, max(0.1, _to_float(self.partial_ratio_var.get(), 0.5))),
-                "trailing_start_r": max(0.1, _to_float(self.trailing_start_var.get(), 1.2)),
-                "trailing_atr_mult": max(0.1, _to_float(self.trailing_atr_var.get(), 1.2)),
-                "trailing_step_points": max(0.1, _to_float(self.trailing_step_var.get(), 10.0)),
-                "min_rr": max(0.1, _to_float(self.min_rr_var.get(), 1.2)),
-                "session_start": self.session_start_var.get().strip() or "07:00",
-                "session_end": self.session_end_var.get().strip() or "20:30",
-            },
-            "strategy": dict(self.config.get("strategy", {})),
-            "ai": {
-                "enabled": bool(self.ai_enabled_var.get()),
-                "hf_model": self.ai_model_var.get().strip(),
-                "timeout_seconds": int(self.config.get("ai", {}).get("timeout_seconds", 12)),
-            },
-            "notifications": {
-                "enabled": True,
-                "queue_file": self.queue_file_var.get().strip() or "xauusd_push_queue.txt",
-                "min_priority": int(self.config.get("notifications", {}).get("min_priority", 1)),
-            },
-        }
-
-    def _persist_config(self) -> None:
-        self.config_path.parent.mkdir(parents=True, exist_ok=True)
-        with self.config_path.open("w", encoding="utf-8") as handle:
-            yaml.safe_dump(self.config, handle, sort_keys=False, allow_unicode=True)
-
-    def _apply_settings(self) -> None:
-        with self._lock:
-            self.config = self._collect_config_from_form()
-            self._persist_config()
-            self.trader = self._build_trader()
-        self.status_var.set("Configuração aplicada")
-        self._append_log(f"[{_now_text()}] configurações aplicadas e salvas", "info")
-        self._show_toast("Configurações salvas com sucesso", kind="success")
-        self._refresh_all()
-
-    def _update_market_data(self) -> None:
-        with self._lock:
-            trader = self.trader
-        if not trader.broker.connect():
-            self.connection_var.set("Desconectado")
-            self.status_var.set("Falha na conexão MT5")
-            return
-
-        symbol = self.symbol_var.get().strip() or "XAUUSD"
-        if not trader.broker.ensure_symbol(symbol):
-            self.connection_var.set("Símbolo indisponível")
-            return
-
-        try:
-            import MetaTrader5 as mt5  # type: ignore
-
-            tick = mt5.symbol_info_tick(symbol)
-        except Exception:
-            tick = None
-
-        if tick is not None:
-            price = float(tick.ask if self.side_var.get().lower() == "buy" else tick.bid)
-            self.current_price_var.set(f"{price:.2f}")
-            spread = trader.broker.current_spread_points(symbol)
-            self.spread_var.set(f"{spread:.1f} pts")
-        else:
-            self.current_price_var.set("-")
-            self.spread_var.set("-")
-
-    def _update_performance(self) -> None:
-        with self._lock:
-            trader = self.trader
-
-        symbol = self.symbol_var.get().strip() or "XAUUSD"
-        if not trader.broker.connect():
-            self.connection_var.set("Desconectado")
-            return
-
-        account = trader.broker.account_info()
-        balance = float(account.get("balance") or 0.0)
-        equity = float(account.get("equity") or balance)
-        free_margin = float(account.get("margin_free") or account.get("free_margin") or 0.0)
-        margin_level = float(account.get("margin_level") or 0.0)
-        positions = trader.engine.list_positions(symbol)
-        open_pnl = sum(float(pos.profit) for pos in positions)
-        daily_pnl = trader.risk.daily_pnl_from_equity(equity)
-        spread = trader.broker.current_spread_points(symbol)
-
-        self.metric_vars["balance"].set(f"{balance:,.2f}")
-        self.metric_vars["equity"].set(f"{equity:,.2f}")
-        self.metric_vars["free_margin"].set(f"{free_margin:,.2f}")
-        self.metric_vars["daily_pnl"].set(f"{daily_pnl:,.2f}")
-        self.metric_vars["open_pnl"].set(f"{open_pnl:,.2f}")
-        self.metric_vars["open_positions"].set(str(len(positions)))
-
-        self.account_balance_var.set(f"{balance:,.2f}")
-        self.account_equity_var.set(f"{equity:,.2f}")
-        self.account_free_margin_var.set(f"{free_margin:,.2f}")
-        self.account_margin_level_var.set(f"{margin_level:.1f}%")
-        self.daily_pnl_var.set(f"{daily_pnl:,.2f}")
-        self.open_pnl_var.set(f"{open_pnl:,.2f}")
-        self.open_positions_var.set(str(len(positions)))
-        self.trades_today_var.set(str(trader.risk.state.trades_today))
-        self.session_status_var.set("Ativa" if trader.risk.session_allowed() else "Fora da janela")
-        self.lock_status_var.set("Bloqueado" if trader.risk.state.locked else "Liberado")
-        self.mode_status_var.set("Live" if not trader.paper_mode else "Paper")
-        self.connection_var.set(f"Conectado | spread={spread:.1f} pts")
-
-        self.performance_vars["day_pnl"].set(f"{daily_pnl:,.2f}")
-        self.performance_vars["open_pnl"].set(f"{open_pnl:,.2f}")
-        self.performance_vars["trades_today"].set(str(trader.risk.state.trades_today))
-        self.performance_vars["consecutive_losses"].set(str(trader.risk.state.consecutive_losses))
-        self.performance_vars["daily_limit"].set(f"{float(trader.config['risk'].get('daily_loss_limit', 0.02)) * 100:.2f}%")
-        self.performance_vars["risk_trade"].set(f"{float(trader.config['risk'].get('risk_per_trade', 0.005)) * 100:.2f}%")
-
-        self._refresh_positions_list(positions)
-        self._update_manual_preview()
-
-    def _refresh_positions_list(self, positions: list[Any]) -> None:
-        for child in self.positions_scroll.inner.winfo_children():
-            child.destroy()
-
-        if not positions:
-            ttk.Label(self.positions_scroll.inner, text="Nenhuma posição aberta.", style="Subtitle.TLabel").pack(anchor="w", pady=8)
-            return
-
-        for position in positions:
-            card = ttk.Frame(self.positions_scroll.inner, style="Card.TFrame", padding=14)
-            card.pack(fill="x", pady=8)
-            top = ttk.Frame(card, style="Card.TFrame")
-            top.pack(fill="x")
-            ttk.Label(top, text=f"Ticket {position.ticket} | {position.symbol} | {position.side.upper()} | {position.volume:.2f} lot", style="Section.TLabel").pack(side="left")
-            ttk.Label(top, text=f"PnL {position.profit:,.2f}", style="Dark.TLabel").pack(side="right")
-
-            details = ttk.Frame(card, style="Card.TFrame")
-            details.pack(fill="x", pady=(8, 0))
-            fields = [
-                ("Entrada", f"{position.price_open:.2f}"),
-                ("Preço atual", f"{position.current_price:.2f}"),
-                ("SL", f"{position.stop_loss:.2f}"),
-                ("TP", f"{position.take_profit:.2f}"),
-                ("Magic", str(position.magic)),
-                ("Comentário", position.comment or "-"),
-            ]
-            for idx, (label, value) in enumerate(fields):
-                box = ttk.Frame(details, style="Card.TFrame")
-                box.grid(row=0, column=idx, padx=6, sticky="nsew")
-                details.columnconfigure(idx, weight=1)
-                ttk.Label(box, text=label, style="MetricTitle.TLabel").pack(anchor="w")
-                ttk.Label(box, text=value, style="Dark.TLabel").pack(anchor="w")
-
-            actions = ttk.Frame(card, style="Card.TFrame")
-            actions.pack(fill="x", pady=(10, 0))
-            ttk.Button(actions, text="Fechar", command=lambda p=position: self._close_position(p, p.volume), style="Danger.TButton").pack(side="left", padx=(0, 8))
-            ttk.Button(actions, text="Fechar 50%", command=lambda p=position: self._partial_close_position(p), style="Info.TButton").pack(side="left", padx=(0, 8))
-
-    def _update_manual_preview(self) -> None:
-        symbol = self.symbol_var.get().strip() or "XAUUSD"
-        price = _to_float(self.current_price_var.get(), 0.0)
-        volume = _to_float(self.manual_volume_var.get(), 0.0)
-        side = self.side_var.get().lower()
-        sl, tp = self._compute_manual_geometry(symbol, side, price)
-        self.manual_auto_sl_var.set(f"{sl:.2f}" if sl > 0 else "-")
-        self.manual_auto_tp_var.set(f"{tp:.2f}" if tp > 0 else "-")
-        if price <= 0 or sl <= 0:
-            self.manual_lot_preview_var.set("Lote sugerido: -")
-            return
-        with self._lock:
-            trader = self.trader
-        info = trader.broker.symbol_info(symbol)
-        equity = float(trader.broker.account_info().get("equity") or trader.broker.account_info().get("balance") or 0.0)
-        lots = trader.risk.calculate_lots(
-            equity=equity,
-            entry_price=price,
-            stop_loss=sl,
-            symbol_info=info,
-            manual_lots=volume if volume > 0 else None,
-        )
-        self.manual_lot_preview_var.set(f"Lote sugerido: {lots:.2f}")
-
-    def _refresh_all(self) -> None:
-        self._update_market_data()
-        self._update_performance()
-        self._update_session_snapshot()
-
-    def _update_session_snapshot(self) -> None:
-        with self._lock:
-            trader = self.trader
-        self.session_status_var.set("Ativa" if trader.risk.session_allowed() else "Fora da janela")
-        self.lock_status_var.set("Bloqueado" if trader.risk.state.locked else "Liberado")
-        self.mode_status_var.set("Live" if not trader.paper_mode else "Paper")
-
-    def _compute_manual_geometry(self, symbol: str, side: str, price: float) -> tuple[float, float]:
-        if price <= 0:
-            return 0.0, 0.0
-        with self._lock:
-            trader = self.trader
-        trader.broker.ensure_symbol(symbol)
-        info = trader.broker.symbol_info(symbol)
-        point = float(info.get("point") or 0.01)
-        digits = int(info.get("digits") or 2)
-        spread_points = trader.broker.current_spread_points(symbol)
-        rates = trader.broker.get_rates(symbol, "M5", 150)
-        atr = 0.0
-        if not rates.empty:
-            try:
-                enriched = add_features(rates)
-                atr = float(enriched.iloc[-1].get("atr_14", 0.0) or 0.0)
-            except Exception:
-                atr = 0.0
-        base_distance = max(atr * 0.75, spread_points * point * 2.0, point * 50)
-        if base_distance <= 0:
-            base_distance = max(price * 0.0005, point * 50)
-        if side == "buy":
-            return round(price - base_distance, digits), round(price + base_distance, digits)
-        return round(price + base_distance, digits), round(price - base_distance, digits)
-
-    def _manual_trade(self, side: str) -> None:
-        try:
-            with self._lock:
-                trader = self.trader
-            symbol = self.symbol_var.get().strip() or "XAUUSD"
-            if not trader.broker.connect():
-                messagebox.showerror("MT5", "Não foi possível conectar ao terminal MT5.")
-                return
-            trader.broker.ensure_symbol(symbol)
-            price = self._get_live_price(symbol, side)
-            if price <= 0:
-                messagebox.showerror("Preço", "Não foi possível obter o preço atual do símbolo.")
-                return
-            sl, tp = self._compute_manual_geometry(symbol, side, price)
-            if sl <= 0 or tp <= 0:
-                messagebox.showwarning("SL/TP", "Não foi possível calcular SL/TP automaticamente.")
-                return
-            volume = _to_float(self.manual_volume_var.get(), 0.0)
-            idea = TradeIdea(
-                symbol=symbol,
-                side=side,
-                entry_mode="market",
-                entry_price=price,
-                stop_loss=sl,
-                take_profit=tp,
-                lots=volume,
-                confidence=0.95,
-                regime="manual",
-                reason=f"manual {side}",
-                partial_take_profit=None,
-                trailing_start_r=None,
-                max_hold_bars=0,
-            )
-            equity = float(trader.broker.account_info().get("equity") or trader.broker.account_info().get("balance") or 0.0)
-            spread = trader.broker.current_spread_points(symbol)
-            decision, order = trader.engine.place_trade(idea, equity=equity, spread_points=spread)
-            result = {"decision": decision.reason, "success": bool(order and order.success), "order": order.raw if order else None, "manual": True}
-            self.last_result_var.set("Última ação: sucesso" if result["success"] else "Última ação: falha")
-            self._append_log(
-                f"[{_now_text()}] manual {side.upper()} | approved={decision.approved} | lot={decision.lots:.2f} | SL={sl:.2f} | TP={tp:.2f} | result={result['success']} | retcode={(result.get('order') or {}).get('retcode')}",
-                "info" if result["success"] else "warn",
-            )
-            if not result["success"]:
-                messagebox.showwarning("Ordem manual", f"A ordem foi recusada: {result.get('order')}")
-            else:
-                self._show_toast(f"Ordem manual {side.upper()} enviada", kind="success")
-                self._refresh_all()
-        except Exception as exc:
-            messagebox.showerror("Erro", str(exc))
-
-    def _get_live_price(self, symbol: str, side: str) -> float:
-        with self._lock:
-            trader = self.trader
-        try:
-            trader.broker.ensure_symbol(symbol)
-            import MetaTrader5 as mt5  # type: ignore
-
-            tick = mt5.symbol_info_tick(symbol)
-            if not tick:
-                return 0.0
-            return float(tick.ask if side.lower() == "buy" else tick.bid)
-        except Exception:
-            return 0.0
-
-    def _close_position(self, position: Any, volume: float) -> None:
-        with self._lock:
-            trader = self.trader
-        result = trader.engine.close_single_position(ticket=position.ticket, symbol=position.symbol, side=position.side, volume=volume)
-        self.last_result_var.set("Última ação: sucesso" if result.get("success") else "Última ação: falha")
-        self._append_log(f"[{_now_text()}] fechar ticket={position.ticket} | result={result}", "info" if result.get("success") else "warn")
-        if result.get("success"):
-            self._show_toast(f"Ticket {position.ticket} fechado", kind="success")
-        self._refresh_all()
-
-    def _partial_close_position(self, position: Any) -> None:
-        with self._lock:
-            trader = self.trader
-        result = trader.engine.partial_close_position(ticket=position.ticket, symbol=position.symbol, side=position.side, volume=position.volume, ratio=0.5)
-        self.last_result_var.set("Última ação: sucesso" if result.get("success") else "Última ação: falha")
-        self._append_log(f"[{_now_text()}] parcial 50% ticket={position.ticket} | result={result}", "info" if result.get("success") else "warn")
-        if result.get("success"):
-            self._show_toast(f"Ticket {position.ticket} fechado 50%", kind="success")
-        self._refresh_all()
-
-    def _close_all_positions(self) -> None:
-        if not messagebox.askyesno("Fechar todas", "Deseja fechar todas as posições abertas agora?"):
-            return
-        with self._lock:
-            trader = self.trader
-        results = trader.engine.close_all_positions(self.symbol_var.get().strip() or None)
-        self._append_log(f"[{_now_text()}] fechar todas | results={results}", "info")
-        self._show_toast("Fechamento de todas as posições enviado", kind="info")
-        self._refresh_all()
-
-    def _start_auto(self) -> None:
-        if self._auto_running:
-            return
-        self._auto_running = True
-        self.status_var.set("Automação iniciada")
-        self._append_log(f"[{_now_text()}] automação iniciada", "info")
-        self._auto_thread = threading.Thread(target=self._auto_loop, daemon=True)
-        self._auto_thread.start()
-
-    def _stop_auto(self) -> None:
-        self._auto_running = False
-        self.status_var.set("Automação parada")
-        self._append_log(f"[{_now_text()}] automação parada", "warn")
-
-    def _auto_loop(self) -> None:
-        while self._auto_running:
-            try:
-                with self._lock:
-                    trader = self.trader
-                result = trader.run_once()
-                self._status_queue.put(str(result))
-            except Exception as exc:
-                self._status_queue.put(f"erro: {exc}")
-                self._event_queue.put(NotificationEvent(title="Erro", message=str(exc), priority=0, kind="error"))
-            time.sleep(max(5, int(self.cycle_var.get() or 30)))
-
-    def _preset_chat_question(self, question: str) -> None:
-        self.chat_question_var.set(question)
-        self._send_chat_question()
-
-    def _send_chat_question(self) -> None:
-        question = self.chat_question_var.get().strip()
-        if not question:
-            return
-        self.chat_question_var.set("")
-        self._append_chat("user", question)
-        self.chat_status_var.set("Consultando IA...")
-        threading.Thread(target=self._send_chat_worker, args=(question,), daemon=True).start()
-        try:
-            self.chat_input.focus_set()
-        except Exception:
-            pass
-
-    def _send_chat_worker(self, question: str) -> None:
-        try:
-            with self._lock:
-                trader = self.trader
-            response = trader.ai.chat(question, context=self._build_ai_context(), history=self.chat_history)
-            answer = str(response.get("answer") or "").strip() or "A IA não retornou resposta."
-            self.chat_history.append(("user", question))
-            self.chat_history.append(("assistant", answer))
-            backend = str(response.get("backend") or "unknown")
-            self._event_queue.put(NotificationEvent(title="Chat IA", message=answer[:240], priority=1, kind="info"))
-            self.root.after(0, lambda: self._append_chat("assistant", answer))
-            self.root.after(0, lambda: self.chat_status_var.set(f"IA pronta ({backend})"))
-            self.root.after(0, lambda: self._show_toast("Resposta recebida da IA", kind="success"))
-        except Exception as exc:
-            self.root.after(0, lambda: self.chat_status_var.set("Erro na IA"))
-            self.root.after(0, lambda: self._append_chat("assistant", f"Falha ao consultar a IA: {exc}"))
-            self.root.after(0, lambda: self._show_toast("Falha ao consultar a IA", kind="error"))
-
-    def _build_ai_context(self) -> str:
-        with self._lock:
-            trader = self.trader
-        symbol = self.symbol_var.get().strip() or "XAUUSD"
-        positions = trader.engine.list_positions(symbol)
-        return "\n".join(
-            [
-                f"Símbolo: {symbol}",
-                f"Modo: {'Paper' if trader.paper_mode else 'Live'}",
-                f"Preço atual: {self.current_price_var.get()}",
-                f"Spread: {self.spread_var.get()}",
-                f"PnL do dia: {self.daily_pnl_var.get()}",
-                f"Posições abertas: {len(positions)}",
-                f"Sessão: {self.session_status_var.get()}",
-                f"Bloqueio: {self.lock_status_var.get()}",
-                f"Último resultado: {self.last_result_var.get()}",
-            ]
-        )
-
-    def _poll_queues(self) -> None:
-        try:
-            while True:
-                event = self._event_queue.get_nowait()
-                tag = "info"
-                if event.kind == "warn":
-                    tag = "warn"
-                elif event.kind == "error":
-                    tag = "error"
-                self._append_log(f"[{event.created_at or _now_text()}] {event.kind.upper()} {event.title} | {event.message}", tag)
-                self.last_result_var.set(f"Último evento: {event.title}")
-        except queue.Empty:
-            pass
-
-        try:
-            while True:
-                status = self._status_queue.get_nowait()
-                self.last_result_var.set(status[:160])
-        except queue.Empty:
-            pass
-
-        self.root.after(250, self._poll_queues)
-
-    def _show_toast(self, message: str, *, kind: str = "info", duration_ms: int = 2500) -> None:
-        colors = {
-            "info": ("#0f766e", "#e5f9f5"),
-            "success": ("#15803d", "#ecfdf5"),
-            "warn": ("#b45309", "#fffbeb"),
-            "error": ("#b91c1c", "#fef2f2"),
-        }
-        bg, fg = colors.get(kind, colors["info"])
-        self.toast_var.set(message)
-        try:
-            self.toast_label.configure(background=bg, foreground=fg)
-        except Exception:
-            pass
-        if self.toast_window is not None:
-            try:
-                self.toast_window.destroy()
-            except Exception:
-                pass
-        self.toast_window = tk.Toplevel(self.root)
-        self.toast_window.overrideredirect(True)
-        self.toast_window.attributes("-topmost", True)
-        self.toast_window.configure(bg=bg)
-        label = tk.Label(self.toast_window, text=message, bg=bg, fg=fg, padx=16, pady=10, font=("Segoe UI", 10, "bold"))
-        label.pack()
-        self.root.update_idletasks()
-        x = self.root.winfo_rootx() + self.root.winfo_width() - 360
-        y = self.root.winfo_rooty() + 20
-        self.toast_window.geometry(f"320x48+{max(20, x)}+{max(20, y)}")
-        self.root.after(duration_ms, self._hide_toast)
-
-    def _hide_toast(self) -> None:
-        if self.toast_window is not None:
-            try:
-                self.toast_window.destroy()
-            except Exception:
-                pass
-            self.toast_window = None
-        self.toast_var.set("")
-
-    def _tick(self) -> None:
-        try:
-            self._refresh_all()
-        finally:
-            self.root.after(1000, self._tick)
-
-    def _on_close(self) -> None:
-        self._auto_running = False
-        try:
-            self.root.destroy()
-        except Exception:
-            pass
-
-    def run(self) -> None:
-        self.root.mainloop()
-
-
-def launch_gui(config_path: Path) -> None:
-    panel = XAUUSDControlPanel(config_path)
-    panel.run()
-</file>
-
-<file path="configs/default.yaml">
-app:
-  symbol: XAUUSD
-  timeframes:
-  - M1
-  - M5
-  - M15
-  mode: live
-  cycle_seconds: 30
-  position_state_path: runtime/position_state.json
-broker:
-  terminal_path: C:\Program Files\MetaTrader 5\terminal64.exe
-  login: 1513256820
-  password: 4$Kr4!$!!6cA
-  server: FTMO-Demo
-  deviation: 20
-  magic: 2401001
-risk:
-  risk_per_trade: 0.005
-  daily_loss_limit: 0.02
-  max_consecutive_losses: 3
-  max_trades_per_day: 5
-  max_open_positions: 1
-  max_spread_points: 80.0
-  breakeven_trigger_r: 0.9
-  partial_take_profit_r: 1.0
-  final_take_profit_r: 2.0
-  partial_close_ratio: 0.5
-  trailing_start_r: 1.2
-  trailing_atr_mult: 1.2
-  trailing_step_points: 10.0
-  min_rr: 1.2
-  session_start: 00:00
-  session_end: '23:30'
-strategy:
-  atr_period: 14
-  ema_fast: 20
-  ema_slow: 50
-  rsi_period: 14
-  adx_period: 14
-  breakout_lookback: 20
-  range_lookback: 30
-  confirmation_bars: 2
-  max_hold_bars: 20
-ai:
-  enabled: true
-  hf_model: Qwen/Qwen2.5-7B-Instruct-1M
-  timeout_seconds: 12
-notifications:
-  enabled: true
-  queue_file: xauusd_push_queue.txt
-  min_priority: 1
 </file>
 
 <file path="README.md">
@@ -3928,6 +2915,1346 @@ class MT5Broker:
         return self._build_attempts(symbol, request, "pending")
 </file>
 
+<file path="src/xauusd_ia_trader/gui.py">
+from __future__ import annotations
+
+import os
+import queue
+import threading
+import time
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+
+import yaml
+
+from .config import load_config
+from .indicators import add_features
+from .models import TradeIdea
+from .notifier import CallbackSink, NotificationEvent
+from .trader import XAUUSDAutonomousTrader
+
+
+def _now_text() -> str:
+    return datetime.now(UTC).strftime("%H:%M:%S")
+
+
+def _to_float(value: str, default: float = 0.0) -> float:
+    try:
+        return float(str(value).replace(",", ".").strip())
+    except Exception:
+        return default
+
+
+def _to_int(value: str, default: int = 0) -> int:
+    try:
+        return int(float(str(value).strip()))
+    except Exception:
+        return default
+
+
+class ScrollableFrame(ttk.Frame):
+    def __init__(self, master: tk.Widget, **kwargs: Any) -> None:
+        super().__init__(master, **kwargs)
+        self.canvas = tk.Canvas(self, highlightthickness=0, bd=0, bg="#0b1220")
+        self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.inner = ttk.Frame(self.canvas, style="Card.TFrame")
+        self.window_id = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
+        self.inner.bind("<Configure>", lambda _event: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.canvas.bind("<Configure>", lambda event: self.canvas.itemconfigure(self.window_id, width=event.width))
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+
+
+class XAUUSDControlPanel:
+    def __init__(self, config_path: Path) -> None:
+        self.config_path = config_path
+        self.config = load_config(config_path)
+
+        self.root = tk.Tk()
+        self.root.title("XAUUSD IA Trader")
+        self.root.geometry("1540x980")
+        self.root.minsize(1360, 860)
+        self.root.configure(bg="#0b1220")
+
+        self._lock = threading.Lock()
+        self._auto_running = False
+        self._auto_thread: threading.Thread | None = None
+        self._event_queue: queue.Queue[NotificationEvent] = queue.Queue()
+        self._status_queue: queue.Queue[str] = queue.Queue()
+        self.chat_history: list[tuple[str, str]] = []
+        self.toast_var = tk.StringVar(value="")
+        self.toast_window: tk.Toplevel | None = None
+
+        self._build_style()
+        self._build_vars()
+        self.trader = self._build_trader()
+        self._build_layout()
+        self._bind_shortcuts()
+        self._refresh_all()
+        self.root.after(250, self._poll_queues)
+        self.root.after(1000, self._tick)
+
+    def _build_style(self) -> None:
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        style.configure(".", font=("Segoe UI", 10))
+        style.configure("App.TFrame", background="#0b1220")
+        style.configure("Card.TFrame", background="#111827")
+        style.configure("Dark.TLabelframe", background="#111827", foreground="#e5e7eb")
+        style.configure("Dark.TLabelframe.Label", background="#111827", foreground="#93c5fd", font=("Segoe UI Semibold", 10))
+        style.configure("Dark.TLabel", background="#111827", foreground="#e5e7eb")
+        style.configure("Title.TLabel", background="#0b1220", foreground="#f8fafc", font=("Segoe UI Semibold", 18))
+        style.configure("Subtitle.TLabel", background="#0b1220", foreground="#94a3b8", font=("Segoe UI", 10))
+        style.configure("MetricTitle.TLabel", background="#111827", foreground="#94a3b8", font=("Segoe UI", 9))
+        style.configure("MetricValue.TLabel", background="#111827", foreground="#f8fafc", font=("Segoe UI Semibold", 18))
+        style.configure("Section.TLabel", background="#0b1220", foreground="#cbd5e1", font=("Segoe UI Semibold", 12))
+        style.configure("Accent.TButton", padding=(12, 8), background="#2563eb", foreground="white")
+        style.map("Accent.TButton", background=[("active", "#1d4ed8")])
+        style.configure("Danger.TButton", padding=(12, 8), background="#b91c1c", foreground="white")
+        style.map("Danger.TButton", background=[("active", "#991b1b")])
+        style.configure("Success.TButton", padding=(12, 8), background="#15803d", foreground="white")
+        style.map("Success.TButton", background=[("active", "#166534")])
+        style.configure("Info.TButton", padding=(12, 8), background="#0f766e", foreground="white")
+        style.map("Info.TButton", background=[("active", "#115e59")])
+        style.configure(
+            "Dark.TEntry",
+            fieldbackground="#0f172a",
+            background="#0f172a",
+            foreground="#f8fafc",
+            insertcolor="#f8fafc",
+        )
+        style.configure(
+            "Dark.TCombobox",
+            fieldbackground="#111827",
+            background="#111827",
+            foreground="#f8fafc",
+            selectforeground="#f8fafc",
+            selectbackground="#2563eb",
+            arrowcolor="#e5e7eb",
+        )
+        style.map(
+            "Dark.TCombobox",
+            fieldbackground=[("readonly", "#111827"), ("active", "#111827")],
+            background=[("readonly", "#111827"), ("active", "#111827")],
+            foreground=[("readonly", "#f8fafc"), ("active", "#f8fafc")],
+        )
+        self.root.option_add("*TCombobox*Listbox.background", "#111827")
+        self.root.option_add("*TCombobox*Listbox.foreground", "#f8fafc")
+        self.root.option_add("*TCombobox*Listbox.selectBackground", "#2563eb")
+        self.root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
+
+    def _build_vars(self) -> None:
+        app = self.config.get("app", {})
+        broker = self.config.get("broker", {})
+        risk = self.config.get("risk", {})
+        ai = self.config.get("ai", {})
+        notifications = self.config.get("notifications", {})
+
+        self.symbol_var = tk.StringVar(value=str(app.get("symbol", "XAUUSD")))
+        self.mode_var = tk.StringVar(value=str(app.get("mode", "live")).lower())
+        self.cycle_var = tk.StringVar(value=str(app.get("cycle_seconds", 30)))
+        self.position_state_var = tk.StringVar(value=str(app.get("position_state_path", "runtime/position_state.json")))
+
+        self.terminal_path_var = tk.StringVar(value=str(broker.get("terminal_path", "")))
+        self.login_var = tk.StringVar(value=str(broker.get("login", "")))
+        self.password_var = tk.StringVar(value=str(broker.get("password", "")))
+        self.server_var = tk.StringVar(value=str(broker.get("server", "")))
+        self.deviation_var = tk.StringVar(value=str(broker.get("deviation", 20)))
+        self.magic_var = tk.StringVar(value=str(broker.get("magic", 2401001)))
+
+        self.risk_var = tk.StringVar(value=f"{float(risk.get('risk_per_trade', 0.005)) * 100:.2f}")
+        self.daily_loss_var = tk.StringVar(value=f"{float(risk.get('daily_loss_limit', 0.02)) * 100:.2f}")
+        self.max_consecutive_var = tk.StringVar(value=str(risk.get("max_consecutive_losses", 3)))
+        self.max_trades_var = tk.StringVar(value=str(risk.get("max_trades_per_day", 5)))
+        self.max_open_var = tk.StringVar(value=str(risk.get("max_open_positions", 1)))
+        self.max_spread_var = tk.StringVar(value=str(risk.get("max_spread_points", 80)))
+        self.session_start_var = tk.StringVar(value=str(risk.get("session_start", "07:00")))
+        self.session_end_var = tk.StringVar(value=str(risk.get("session_end", "20:30")))
+        self.be_var = tk.StringVar(value=str(risk.get("breakeven_trigger_r", 0.9)))
+        self.partial_var = tk.StringVar(value=str(risk.get("partial_take_profit_r", 1.0)))
+        self.final_tp_var = tk.StringVar(value=str(risk.get("final_take_profit_r", 2.0)))
+        self.partial_ratio_var = tk.StringVar(value=str(risk.get("partial_close_ratio", 0.5)))
+        self.trailing_start_var = tk.StringVar(value=str(risk.get("trailing_start_r", 1.2)))
+        self.trailing_atr_var = tk.StringVar(value=str(risk.get("trailing_atr_mult", 1.2)))
+        self.trailing_step_var = tk.StringVar(value=str(risk.get("trailing_step_points", 10.0)))
+        self.min_rr_var = tk.StringVar(value=str(risk.get("min_rr", 1.2)))
+
+        self.ai_enabled_var = tk.BooleanVar(value=bool(ai.get("enabled", False)))
+        self.ai_model_var = tk.StringVar(value=str(ai.get("hf_model", "")))
+        self.ai_api_key_var = tk.StringVar(value=str(ai.get("hf_api_key", os.getenv("HF_API_KEY", ""))))
+        self.queue_file_var = tk.StringVar(value=str(notifications.get("queue_file", "xauusd_push_queue.txt")))
+
+        self.side_var = tk.StringVar(value="buy")
+        self.manual_volume_var = tk.StringVar(value="")
+        self.manual_auto_sl_var = tk.StringVar(value="-")
+        self.manual_auto_tp_var = tk.StringVar(value="-")
+        self.manual_sl_override_var = tk.StringVar(value="")
+        self.manual_tp_override_var = tk.StringVar(value="")
+        self.manual_lot_preview_var = tk.StringVar(value="Lote sugerido: -")
+        self.current_price_var = tk.StringVar(value="-")
+        self.spread_var = tk.StringVar(value="-")
+
+        self.account_balance_var = tk.StringVar(value="-")
+        self.account_equity_var = tk.StringVar(value="-")
+        self.account_free_margin_var = tk.StringVar(value="-")
+        self.account_margin_level_var = tk.StringVar(value="-")
+        self.daily_pnl_var = tk.StringVar(value="-")
+        self.open_pnl_var = tk.StringVar(value="-")
+        self.open_positions_var = tk.StringVar(value="-")
+        self.trades_today_var = tk.StringVar(value="-")
+        self.session_status_var = tk.StringVar(value="-")
+        self.lock_status_var = tk.StringVar(value="-")
+        self.mode_status_var = tk.StringVar(value="Live" if self.mode_var.get() == "live" else "Paper")
+        self.connection_var = tk.StringVar(value="Desconectado")
+        self.status_var = tk.StringVar(value="Pronto para operar")
+        self.last_result_var = tk.StringVar(value="Pronto")
+        self.regime_var = tk.StringVar(value="-")
+
+        self.metric_vars: dict[str, tk.StringVar] = {}
+        self.chat_status_var = tk.StringVar(value="IA pronta")
+        self.chat_question_var = tk.StringVar(value="")
+
+    def _build_trader(self) -> XAUUSDAutonomousTrader:
+        trader = XAUUSDAutonomousTrader(self.config)
+        trader.notifier.sinks.append(CallbackSink(self._handle_notification))
+        return trader
+
+    def _build_layout(self) -> None:
+        outer = ttk.Frame(self.root, style="App.TFrame", padding=16)
+        outer.pack(fill="both", expand=True)
+
+        header = ttk.Frame(outer, style="App.TFrame")
+        header.pack(fill="x", pady=(0, 12))
+        ttk.Label(header, text="XAUUSD IA Trader", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(
+            header,
+            text="Painel operacional com controle manual, automação, risco, posições, IA e logs em tempo real.",
+            style="Subtitle.TLabel",
+        ).pack(anchor="w", pady=(4, 0))
+
+        toolbar = ttk.Frame(outer, style="App.TFrame")
+        toolbar.pack(fill="x", pady=(0, 12))
+        for label, command, style_name in [
+            ("Aplicar", self._apply_settings, "Accent.TButton"),
+            ("Iniciar Auto", self._start_auto, "Success.TButton"),
+            ("Parar Auto", self._stop_auto, "Danger.TButton"),
+            ("Atualizar", self._refresh_now, "Info.TButton"),
+            ("Fechar Todas", self._close_all_positions, "Danger.TButton"),
+        ]:
+            ttk.Button(toolbar, text=label, command=command, style=style_name).pack(side="left", padx=(0, 10))
+        ttk.Label(toolbar, textvariable=self.status_var, style="Section.TLabel").pack(side="right")
+        self.toast_label = ttk.Label(outer, textvariable=self.toast_var, style="Subtitle.TLabel")
+        self.toast_label.pack(fill="x", pady=(0, 8))
+
+        metrics = ttk.Frame(outer, style="App.TFrame")
+        metrics.pack(fill="x", pady=(0, 14))
+        cards = [
+            ("balance", "Saldo"),
+            ("equity", "Capital líquido"),
+            ("free_margin", "Margem livre"),
+            ("daily_pnl", "PnL do dia"),
+            ("open_pnl", "PnL aberto"),
+            ("open_positions", "Posições"),
+        ]
+        for idx, (key, title) in enumerate(cards):
+            card = ttk.Frame(metrics, style="Card.TFrame", padding=14)
+            card.grid(row=0, column=idx, padx=6, sticky="nsew")
+            metrics.columnconfigure(idx, weight=1)
+            ttk.Label(card, text=title, style="MetricTitle.TLabel").pack(anchor="w")
+            var = tk.StringVar(value="-")
+            self.metric_vars[key] = var
+            ttk.Label(card, textvariable=var, style="MetricValue.TLabel").pack(anchor="w", pady=(6, 0))
+
+        self.notebook = ttk.Notebook(outer)
+        self.notebook.pack(fill="both", expand=True)
+        self.dashboard_tab = ttk.Frame(self.notebook, style="App.TFrame")
+        self.manual_tab = ttk.Frame(self.notebook, style="App.TFrame")
+        self.positions_tab = ttk.Frame(self.notebook, style="App.TFrame")
+        self.settings_tab = ttk.Frame(self.notebook, style="App.TFrame")
+        self.ai_tab = ttk.Frame(self.notebook, style="App.TFrame")
+        self.logs_tab = ttk.Frame(self.notebook, style="App.TFrame")
+
+        self.notebook.add(self.dashboard_tab, text="Dashboard")
+        self.notebook.add(self.manual_tab, text="Manual")
+        self.notebook.add(self.positions_tab, text="Posições")
+        self.notebook.add(self.settings_tab, text="Config")
+        self.notebook.add(self.ai_tab, text="IA")
+        self.notebook.add(self.logs_tab, text="Logs")
+
+        self._build_dashboard_tab()
+        self._build_manual_tab()
+        self._build_positions_tab()
+        self._build_settings_tab()
+        self._build_ai_tab()
+        self._build_logs_tab()
+        self._build_status_bar(outer)
+
+    def _build_status_bar(self, parent: ttk.Frame) -> None:
+        bar = ttk.Frame(parent, style="Card.TFrame", padding=(12, 8))
+        bar.pack(fill="x", pady=(10, 0))
+        left = ttk.Frame(bar, style="Card.TFrame")
+        left.pack(side="left", fill="x", expand=True)
+        for label, var in [
+            ("Conexão", self.connection_var),
+            ("Modo", self.mode_status_var),
+            ("Regime", self.regime_var),
+            ("Sessão", self.session_status_var),
+            ("Bloqueio", self.lock_status_var),
+        ]:
+            box = ttk.Frame(left, style="Card.TFrame")
+            box.pack(side="left", padx=(0, 20))
+            ttk.Label(box, text=f"{label}:", style="MetricTitle.TLabel").pack(anchor="w")
+            ttk.Label(box, textvariable=var, style="Dark.TLabel").pack(anchor="w")
+        ttk.Label(bar, textvariable=self.last_result_var, style="Dark.TLabel").pack(side="right")
+
+    def _build_dashboard_tab(self) -> None:
+        outer = ttk.Frame(self.dashboard_tab, style="App.TFrame", padding=12)
+        outer.pack(fill="both", expand=True)
+
+        left = ttk.Frame(outer, style="App.TFrame")
+        left.pack(side="left", fill="both", expand=True)
+        right = ttk.Frame(outer, style="App.TFrame", width=360)
+        right.pack(side="right", fill="y", padx=(12, 0))
+
+        perf = ttk.LabelFrame(left, text="Performance", style="Dark.TLabelframe", padding=12)
+        perf.pack(fill="x", pady=(0, 12))
+        perf_grid = ttk.Frame(perf, style="Card.TFrame")
+        perf_grid.pack(fill="x")
+        perf_items = [
+            ("day_pnl", "Lucro do dia"),
+            ("open_pnl", "PnL aberto"),
+            ("trades_today", "Trades hoje"),
+            ("consecutive_losses", "Perdas seguidas"),
+            ("daily_limit", "Limite diário"),
+            ("risk_trade", "Risco por trade"),
+        ]
+        self.performance_vars: dict[str, tk.StringVar] = {}
+        for idx, (key, title) in enumerate(perf_items):
+            cell = ttk.Frame(perf_grid, style="Card.TFrame", padding=10)
+            cell.grid(row=idx // 3, column=idx % 3, padx=6, pady=6, sticky="nsew")
+            perf_grid.columnconfigure(idx % 3, weight=1)
+            ttk.Label(cell, text=title, style="MetricTitle.TLabel").pack(anchor="w")
+            var = tk.StringVar(value="-")
+            self.performance_vars[key] = var
+            ttk.Label(cell, textvariable=var, style="MetricValue.TLabel").pack(anchor="w", pady=(4, 0))
+
+        market = ttk.LabelFrame(left, text="Mercado e sessão", style="Dark.TLabelframe", padding=12)
+        market.pack(fill="x")
+        for label, var in [
+            ("Preço atual", self.current_price_var),
+            ("Spread atual", self.spread_var),
+            ("Posições abertas", self.open_positions_var),
+            ("Status da conta", self.connection_var),
+        ]:
+            row = ttk.Frame(market, style="Card.TFrame")
+            row.pack(fill="x", pady=4)
+            ttk.Label(row, text=label, style="MetricTitle.TLabel", width=18).pack(side="left")
+            ttk.Label(row, textvariable=var, style="Dark.TLabel").pack(side="left")
+
+        quick = ttk.LabelFrame(right, text="Ações rápidas", style="Dark.TLabelframe", padding=12)
+        quick.pack(fill="both", expand=True)
+        ttk.Label(
+            quick,
+            text="O botão Iniciar Auto mantém o ciclo contínuo; as travas de sessão e risco continuam valendo.",
+            style="Dark.TLabel",
+            wraplength=320,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 10))
+        ttk.Button(quick, text="Atualizar agora", command=self._refresh_now, style="Info.TButton").pack(fill="x", pady=(4, 10))
+        ttk.Button(quick, text="Abrir compra manual", command=lambda: self._manual_trade("buy"), style="Success.TButton").pack(fill="x", pady=10, ipady=6)
+        ttk.Button(quick, text="Abrir venda manual", command=lambda: self._manual_trade("sell"), style="Danger.TButton").pack(fill="x", pady=10, ipady=6)
+        ttk.Separator(quick, orient="horizontal").pack(fill="x", pady=6)
+        ttk.Button(quick, text="Fechar todas", command=self._close_all_positions, style="Danger.TButton").pack(fill="x", pady=(4, 2), ipady=4)
+
+    def _build_manual_tab(self) -> None:
+        outer = ttk.Frame(self.manual_tab, style="App.TFrame", padding=12)
+        outer.pack(fill="both", expand=True)
+
+        left = ttk.LabelFrame(outer, text="Ordem manual", style="Dark.TLabelframe", padding=14)
+        left.pack(side="left", fill="both", expand=True)
+        right = ttk.LabelFrame(outer, text="Resumo", style="Dark.TLabelframe", padding=14)
+        right.pack(side="right", fill="y", padx=(12, 0))
+
+        rows: list[tuple[str, tk.Variable]] = [
+            ("Símbolo", self.symbol_var),
+            ("Lado", self.side_var),
+            ("Modo", self.mode_var),
+            ("Preço atual", self.current_price_var),
+            ("Lote manual", self.manual_volume_var),
+            ("SL automático", self.manual_auto_sl_var),
+            ("TP automático", self.manual_auto_tp_var),
+            ("SL manual (opc.)", self.manual_sl_override_var),
+            ("TP manual (opc.)", self.manual_tp_override_var),
+            ("Lote sugerido", self.manual_lot_preview_var),
+        ]
+
+        for idx, (label, var) in enumerate(rows):
+            row = ttk.Frame(left, style="Card.TFrame")
+            row.pack(fill="x", pady=5)
+            ttk.Label(row, text=label, style="MetricTitle.TLabel", width=18).pack(side="left")
+            if label == "Lado":
+                widget = ttk.Combobox(row, textvariable=var, values=["buy", "sell"], state="readonly", style="Dark.TCombobox")
+                widget.pack(side="left", fill="x", expand=True)
+            elif label == "Modo":
+                widget = ttk.Combobox(row, textvariable=var, values=["live", "paper"], state="readonly", style="Dark.TCombobox")
+                widget.pack(side="left", fill="x", expand=True)
+            elif label in {"Preço atual", "SL automático", "TP automático", "Lote sugerido"}:
+                entry = ttk.Entry(row, textvariable=var, style="Dark.TEntry", state="readonly")
+                entry.pack(side="left", fill="x", expand=True)
+            else:
+                entry = ttk.Entry(row, textvariable=var, style="Dark.TEntry")
+                entry.pack(side="left", fill="x", expand=True)
+            # Hint for manual override fields
+            if label in {"SL manual (opc.)", "TP manual (opc.)"}:
+                ttk.Label(row, text="↩ sobrescreve auto", style="Subtitle.TLabel", foreground="#6b7280").pack(side="left", padx=(6, 0))
+
+        actions = ttk.Frame(left, style="Card.TFrame")
+        actions.pack(fill="x", pady=(14, 0))
+        ttk.Button(actions, text="Abrir Compra", command=lambda: self._manual_trade("buy"), style="Success.TButton").pack(side="left", padx=(0, 8))
+        ttk.Button(actions, text="Abrir Venda", command=lambda: self._manual_trade("sell"), style="Danger.TButton").pack(side="left", padx=(0, 8))
+        ttk.Button(actions, text="Atualizar preço", command=self._refresh_price_only, style="Info.TButton").pack(side="left")
+
+        ttk.Label(
+            left,
+            text="SL/TP automáticos em RR 1:1. Preencha SL/TP manual para sobrescrever os valores automáticos.",
+            style="Subtitle.TLabel",
+            wraplength=760,
+            justify="left",
+        ).pack(anchor="w", pady=(10, 0))
+
+        for label, var in [
+            ("Saldo", self.account_balance_var),
+            ("Equity", self.account_equity_var),
+            ("Margem livre", self.account_free_margin_var),
+            ("Margem %", self.account_margin_level_var),
+            ("PnL do dia", self.daily_pnl_var),
+            ("PnL aberto", self.open_pnl_var),
+            ("Trades hoje", self.trades_today_var),
+            ("Risco por trade", self.risk_var),
+        ]:
+            row = ttk.Frame(right, style="Card.TFrame")
+            row.pack(fill="x", pady=4)
+            ttk.Label(row, text=label, style="MetricTitle.TLabel", width=18).pack(side="left")
+            ttk.Label(row, textvariable=var, style="Dark.TLabel").pack(side="left")
+
+    def _build_positions_tab(self) -> None:
+        outer = ttk.Frame(self.positions_tab, style="App.TFrame", padding=12)
+        outer.pack(fill="both", expand=True)
+        header = ttk.Frame(outer, style="App.TFrame")
+        header.pack(fill="x", pady=(0, 10))
+        ttk.Label(header, text="Posições abertas", style="Section.TLabel").pack(side="left")
+        ttk.Button(header, text="Fechar Todas", command=self._close_all_positions, style="Danger.TButton").pack(side="right")
+        ttk.Button(header, text="Atualizar", command=self._refresh_now, style="Info.TButton").pack(side="right", padx=(0, 8))
+        self.positions_scroll = ScrollableFrame(outer)
+        self.positions_scroll.pack(fill="both", expand=True)
+
+    def _build_settings_tab(self) -> None:
+        outer = ttk.Frame(self.settings_tab, style="App.TFrame", padding=12)
+        outer.pack(fill="both", expand=True)
+
+        columns = ttk.Frame(outer, style="App.TFrame")
+        columns.pack(fill="both", expand=True)
+        left = ttk.LabelFrame(columns, text="Operação", style="Dark.TLabelframe", padding=14)
+        left.pack(side="left", fill="both", expand=True)
+        middle = ttk.LabelFrame(columns, text="Risco e sessão", style="Dark.TLabelframe", padding=14)
+        middle.pack(side="left", fill="both", expand=True, padx=12)
+        right = ttk.LabelFrame(columns, text="Conexão e IA", style="Dark.TLabelframe", padding=14)
+        right.pack(side="left", fill="both", expand=True)
+
+        self._settings_form(
+            left,
+            [
+                ("Símbolo", self.symbol_var),
+                ("Modo", self.mode_var),
+                ("Cycle seconds", self.cycle_var),
+                ("Position state", self.position_state_var),
+            ],
+        )
+        self._settings_form(
+            middle,
+            [
+                ("Risco por trade %", self.risk_var),
+                ("Limite diário %", self.daily_loss_var),
+                ("Máx. perdas seguidas", self.max_consecutive_var),
+                ("Máx. trades/dia", self.max_trades_var),
+                ("Máx. posições", self.max_open_var),
+                ("Spread máximo", self.max_spread_var),
+                ("Início sessão", self.session_start_var),
+                ("Fim sessão", self.session_end_var),
+                ("Break-even R", self.be_var),
+                ("Parcial R", self.partial_var),
+                ("TP final R", self.final_tp_var),
+                ("Parcial %", self.partial_ratio_var),
+                ("Trailing start R", self.trailing_start_var),
+                ("Trailing ATR mult", self.trailing_atr_var),
+                ("Trailing step pts", self.trailing_step_var),
+                ("RR mínimo", self.min_rr_var),
+            ],
+        )
+        self._settings_form(
+            right,
+            [
+                ("Terminal MT5", self.terminal_path_var),
+                ("Login", self.login_var),
+                ("Senha", self.password_var),
+                ("Servidor", self.server_var),
+                ("Desvio", self.deviation_var),
+                ("Magic", self.magic_var),
+                ("Arquivo fila", self.queue_file_var),
+                ("IA habilitada", self.ai_enabled_var),
+                ("Modelo HF", self.ai_model_var),
+            ],
+        )
+
+        bottom = ttk.Frame(outer, style="App.TFrame")
+        bottom.pack(fill="x", pady=(12, 0))
+        ttk.Button(bottom, text="Salvar e aplicar", command=self._apply_settings, style="Accent.TButton").pack(side="left")
+        ttk.Button(bottom, text="Carregar arquivo...", command=self._load_config_file_dialog, style="Info.TButton").pack(side="left", padx=(8, 0))
+
+    def _build_ai_tab(self) -> None:
+        outer = ttk.Frame(self.ai_tab, style="App.TFrame", padding=12)
+        outer.pack(fill="both", expand=True)
+
+        header = ttk.Frame(outer, style="App.TFrame")
+        header.pack(fill="x", pady=(0, 10))
+        ttk.Label(header, text="Chat da IA", style="Section.TLabel").pack(side="left")
+        ttk.Label(header, textvariable=self.chat_status_var, style="Subtitle.TLabel").pack(side="right")
+
+        body = ttk.Frame(outer, style="App.TFrame")
+        body.pack(fill="both", expand=True)
+        left = ttk.LabelFrame(body, text="Conversa", style="Dark.TLabelframe", padding=12)
+        left.pack(side="left", fill="both", expand=True)
+        right = ttk.LabelFrame(body, text="Atalhos", style="Dark.TLabelframe", padding=12)
+        right.pack(side="right", fill="y", padx=(12, 0))
+
+        self.chat_text = tk.Text(
+            left,
+            bg="#0f172a",
+            fg="#e5e7eb",
+            insertbackground="#e5e7eb",
+            relief="flat",
+            wrap="word",
+            height=24,
+            font=("Consolas", 10),
+        )
+        self.chat_text.pack(fill="both", expand=True)
+        self.chat_text.configure(state="disabled")
+
+        input_row = ttk.Frame(left, style="Card.TFrame")
+        input_row.pack(fill="x", pady=(10, 0))
+        entry = ttk.Entry(input_row, textvariable=self.chat_question_var, style="Dark.TEntry")
+        entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        entry.bind("<Return>", lambda _event: self._send_chat_question())
+        entry.bind("<KP_Enter>", lambda _event: self._send_chat_question())
+        ttk.Button(input_row, text="Enviar", command=self._send_chat_question, style="Accent.TButton").pack(side="left")
+        self.chat_input = entry
+        ttk.Button(input_row, text="Limpar conversa", command=self._clear_chat, style="Info.TButton").pack(side="left", padx=(8, 0))
+
+        for label, question in [
+            ("Resumo do robô", "Explique o estado atual do robô e os principais riscos."),
+            ("Estratégia", "Resuma a estratégia de entrada, saída e risco em linguagem simples."),
+            ("Posições", "Analise as posições abertas e diga o que está acontecendo."),
+        ]:
+            ttk.Button(right, text=label, command=lambda q=question: self._preset_chat_question(q), style="Info.TButton").pack(fill="x", pady=4)
+
+        ttk.Label(
+            right,
+            text="A IA responde perguntas sobre operação, estratégia e contexto atual do sistema.",
+            style="Subtitle.TLabel",
+            wraplength=260,
+            justify="left",
+        ).pack(anchor="w", pady=(10, 0))
+
+        # --- AI configuration inline ---
+        ttk.Separator(right, orient="horizontal").pack(fill="x", pady=(14, 8))
+        ttk.Label(right, text="Configuração da IA", style="MetricTitle.TLabel").pack(anchor="w")
+
+        cfg_row = ttk.Frame(right, style="Card.TFrame")
+        cfg_row.pack(fill="x", pady=(6, 2))
+        ttk.Label(cfg_row, text="IA habilitada", style="Subtitle.TLabel", width=14).pack(side="left")
+        ttk.Checkbutton(cfg_row, variable=self.ai_enabled_var, style="Dark.TCheckbutton").pack(side="left")
+
+        model_row = ttk.Frame(right, style="Card.TFrame")
+        model_row.pack(fill="x", pady=2)
+        ttk.Label(model_row, text="Modelo", style="Subtitle.TLabel", width=14).pack(side="left")
+        model_cb = ttk.Combobox(
+            model_row,
+            textvariable=self.ai_model_var,
+            values=[
+                # Groq models
+                "llama-3.3-70b-versatile",
+                "llama-3.1-70b-versatile",
+                "llama-3.1-8b-instant",
+                "mixtral-8x7b-32768",
+                "gemma2-9b-it",
+                # HuggingFace models
+                "Qwen/Qwen2.5-7B-Instruct",
+                "Qwen/Qwen2.5-7B-Instruct-1M",
+                "google/gemma-2-2b-it",
+            ],
+            style="Dark.TCombobox",
+            width=20,
+        )
+        model_cb.pack(side="left", fill="x", expand=True)
+
+        key_row = ttk.Frame(right, style="Card.TFrame")
+        key_row.pack(fill="x", pady=2)
+        ttk.Label(key_row, text="API Key", style="Subtitle.TLabel", width=14).pack(side="left")
+        key_entry = ttk.Entry(key_row, textvariable=self.ai_api_key_var, style="Dark.TEntry", width=22, show="*")
+        key_entry.pack(side="left", fill="x", expand=True)
+
+        ttk.Label(
+            right,
+            text="Groq: chave gsk_… | HF: chave hf_…\nModelos Groq são mais rápidos e gratuitos.",
+            style="Subtitle.TLabel",
+            wraplength=260,
+            justify="left",
+        ).pack(anchor="w", pady=(4, 0))
+
+        ttk.Button(
+            right,
+            text="Aplicar configuração IA",
+            command=self._apply_ai_config,
+            style="Accent.TButton",
+        ).pack(fill="x", pady=(8, 0))
+
+    def _build_logs_tab(self) -> None:
+        outer = ttk.Frame(self.logs_tab, style="App.TFrame", padding=12)
+        outer.pack(fill="both", expand=True)
+        header = ttk.Frame(outer, style="App.TFrame")
+        header.pack(fill="x", pady=(0, 8))
+        ttk.Label(header, text="Eventos e logs em tempo real", style="Section.TLabel").pack(side="left")
+        ttk.Button(header, text="Limpar", command=self._clear_logs, style="Info.TButton").pack(side="right")
+        self.log_text = tk.Text(
+            outer,
+            bg="#0f172a",
+            fg="#e5e7eb",
+            insertbackground="#e5e7eb",
+            relief="flat",
+            height=24,
+            wrap="word",
+            font=("Consolas", 10),
+        )
+        self.log_text.pack(fill="both", expand=True)
+        self.log_text.tag_configure("info", foreground="#cbd5e1")
+        self.log_text.tag_configure("warn", foreground="#fbbf24")
+        self.log_text.tag_configure("error", foreground="#f87171")
+        self.log_text.configure(state="disabled")
+
+    def _settings_form(self, parent: ttk.LabelFrame, fields: list[tuple[str, tk.Variable]]) -> None:
+        for label, var in fields:
+            row = ttk.Frame(parent, style="Card.TFrame")
+            row.pack(fill="x", pady=4)
+            ttk.Label(row, text=label, style="MetricTitle.TLabel", width=20).pack(side="left")
+            if isinstance(var, tk.BooleanVar):
+                ttk.Checkbutton(row, variable=var).pack(side="left", anchor="w")
+            elif label == "Modo":
+                ttk.Combobox(row, textvariable=var, values=["live", "paper"], state="readonly", style="Dark.TCombobox").pack(side="left", fill="x", expand=True)
+            else:
+                ttk.Entry(row, textvariable=var, style="Dark.TEntry").pack(side="left", fill="x", expand=True)
+
+    def _bind_shortcuts(self) -> None:
+        self.root.bind("<F5>", lambda _event: self._refresh_now())
+        self.root.bind("<F9>", lambda _event: self._manual_trade("buy"))
+        self.root.bind("<F10>", lambda _event: self._manual_trade("sell"))
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _handle_notification(self, event: NotificationEvent) -> None:
+        self._event_queue.put(event)
+
+    def _append_log(self, text: str, tag: str = "info") -> None:
+        self.log_text.configure(state="normal")
+        self.log_text.insert("end", text + "\n", tag)
+        self.log_text.see("end")
+        self.log_text.configure(state="disabled")
+
+    def _append_chat(self, role: str, text: str) -> None:
+        self.chat_text.configure(state="normal")
+        prefix = "Você" if role == "user" else "IA"
+        self.chat_text.insert("end", f"{prefix}: {text}\n\n")
+        self.chat_text.see("end")
+        self.chat_text.configure(state="disabled")
+
+    def _clear_chat(self) -> None:
+        self.chat_history.clear()
+        self.chat_text.configure(state="normal")
+        self.chat_text.delete("1.0", "end")
+        self.chat_text.configure(state="disabled")
+        self.chat_question_var.set("")
+        self.chat_status_var.set("IA pronta")
+        self._show_toast("Conversa limpa", kind="info")
+
+    def _clear_logs(self) -> None:
+        self.log_text.configure(state="normal")
+        self.log_text.delete("1.0", "end")
+        self.log_text.configure(state="disabled")
+
+    def _refresh_now(self) -> None:
+        self._refresh_all()
+        self._append_log(f"[{_now_text()}] atualização manual concluída", "info")
+
+    def _refresh_price_only(self) -> None:
+        self._update_market_data()
+        self._append_log(f"[{_now_text()}] preço atualizado", "info")
+
+    def _load_config_file_dialog(self) -> None:
+        selected = filedialog.askopenfilename(
+            title="Selecionar configuração",
+            filetypes=[("YAML", "*.yaml *.yml"), ("Todos os arquivos", "*.*")],
+            initialdir=str(self.config_path.parent),
+        )
+        if not selected:
+            return
+        self.config_path = Path(selected)
+        self.config = load_config(self.config_path)
+        self._set_vars_from_config()
+        self.trader = self._build_trader()
+        self._refresh_all()
+        self._append_log(f"[{_now_text()}] configuração carregada de {self.config_path}", "info")
+
+    def _set_vars_from_config(self) -> None:
+        app = self.config.get("app", {})
+        broker = self.config.get("broker", {})
+        risk = self.config.get("risk", {})
+        ai = self.config.get("ai", {})
+        notifications = self.config.get("notifications", {})
+
+        self.symbol_var.set(str(app.get("symbol", "XAUUSD")))
+        self.mode_var.set(str(app.get("mode", "live")).lower())
+        self.cycle_var.set(str(app.get("cycle_seconds", 30)))
+        self.position_state_var.set(str(app.get("position_state_path", "runtime/position_state.json")))
+
+        self.terminal_path_var.set(str(broker.get("terminal_path", "")))
+        self.login_var.set(str(broker.get("login", "")))
+        self.password_var.set(str(broker.get("password", "")))
+        self.server_var.set(str(broker.get("server", "")))
+        self.deviation_var.set(str(broker.get("deviation", 20)))
+        self.magic_var.set(str(broker.get("magic", 2401001)))
+
+        self.risk_var.set(f"{float(risk.get('risk_per_trade', 0.005)) * 100:.2f}")
+        self.daily_loss_var.set(f"{float(risk.get('daily_loss_limit', 0.02)) * 100:.2f}")
+        self.max_consecutive_var.set(str(risk.get("max_consecutive_losses", 3)))
+        self.max_trades_var.set(str(risk.get("max_trades_per_day", 5)))
+        self.max_open_var.set(str(risk.get("max_open_positions", 1)))
+        self.max_spread_var.set(str(risk.get("max_spread_points", 80)))
+        self.session_start_var.set(str(risk.get("session_start", "07:00")))
+        self.session_end_var.set(str(risk.get("session_end", "20:30")))
+        self.be_var.set(str(risk.get("breakeven_trigger_r", 0.9)))
+        self.partial_var.set(str(risk.get("partial_take_profit_r", 1.0)))
+        self.final_tp_var.set(str(risk.get("final_take_profit_r", 2.0)))
+        self.partial_ratio_var.set(str(risk.get("partial_close_ratio", 0.5)))
+        self.trailing_start_var.set(str(risk.get("trailing_start_r", 1.2)))
+        self.trailing_atr_var.set(str(risk.get("trailing_atr_mult", 1.2)))
+        self.trailing_step_var.set(str(risk.get("trailing_step_points", 10.0)))
+        self.min_rr_var.set(str(risk.get("min_rr", 1.2)))
+
+        self.ai_enabled_var.set(bool(ai.get("enabled", False)))
+        self.ai_model_var.set(str(ai.get("hf_model", "")))
+        self.ai_api_key_var.set(str(ai.get("hf_api_key", os.getenv("HF_API_KEY", ""))))
+        self.queue_file_var.set(str(notifications.get("queue_file", "xauusd_push_queue.txt")))
+        self.mode_status_var.set("Live" if self.mode_var.get().lower() == "live" else "Paper")
+
+    def _collect_config_from_form(self) -> dict[str, Any]:
+        return {
+            "app": {
+                "symbol": self.symbol_var.get().strip() or "XAUUSD",
+                "timeframes": list(self.config.get("app", {}).get("timeframes", ["M1", "M5", "M15"])),
+                "mode": self.mode_var.get().strip().lower() or "live",
+                "cycle_seconds": max(1, _to_int(self.cycle_var.get(), 30)),
+                "position_state_path": self.position_state_var.get().strip() or "runtime/position_state.json",
+            },
+            "broker": {
+                "terminal_path": self.terminal_path_var.get().strip(),
+                "login": _to_int(self.login_var.get(), 0),
+                "password": self.password_var.get(),
+                "server": self.server_var.get().strip(),
+                "deviation": _to_int(self.deviation_var.get(), 20),
+                "magic": _to_int(self.magic_var.get(), 2401001),
+            },
+            "risk": {
+                "risk_per_trade": max(0.0, _to_float(self.risk_var.get(), 0.5) / 100.0),
+                "daily_loss_limit": max(0.0, _to_float(self.daily_loss_var.get(), 2.0) / 100.0),
+                "max_consecutive_losses": max(1, _to_int(self.max_consecutive_var.get(), 3)),
+                "max_trades_per_day": max(1, _to_int(self.max_trades_var.get(), 5)),
+                "max_open_positions": max(1, _to_int(self.max_open_var.get(), 1)),
+                "max_spread_points": max(1.0, _to_float(self.max_spread_var.get(), 80.0)),
+                "breakeven_trigger_r": max(0.1, _to_float(self.be_var.get(), 0.9)),
+                "partial_take_profit_r": max(0.1, _to_float(self.partial_var.get(), 1.0)),
+                "final_take_profit_r": max(0.1, _to_float(self.final_tp_var.get(), 2.0)),
+                "partial_close_ratio": min(1.0, max(0.1, _to_float(self.partial_ratio_var.get(), 0.5))),
+                "trailing_start_r": max(0.1, _to_float(self.trailing_start_var.get(), 1.2)),
+                "trailing_atr_mult": max(0.1, _to_float(self.trailing_atr_var.get(), 1.2)),
+                "trailing_step_points": max(0.1, _to_float(self.trailing_step_var.get(), 10.0)),
+                "min_rr": max(0.1, _to_float(self.min_rr_var.get(), 1.2)),
+                "session_start": self.session_start_var.get().strip() or "07:00",
+                "session_end": self.session_end_var.get().strip() or "20:30",
+            },
+            "strategy": dict(self.config.get("strategy", {})),
+            "ai": {
+                "enabled": bool(self.ai_enabled_var.get()),
+                "hf_model": self.ai_model_var.get().strip(),
+                "hf_api_key": self.ai_api_key_var.get().strip(),
+                "timeout_seconds": int(self.config.get("ai", {}).get("timeout_seconds", 12)),
+            },
+            "notifications": {
+                "enabled": True,
+                "queue_file": self.queue_file_var.get().strip() or "xauusd_push_queue.txt",
+                "min_priority": int(self.config.get("notifications", {}).get("min_priority", 1)),
+            },
+        }
+
+    def _persist_config(self) -> None:
+        self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.config_path.open("w", encoding="utf-8") as handle:
+            yaml.safe_dump(self.config, handle, sort_keys=False, allow_unicode=True)
+
+    def _apply_settings(self) -> None:
+        with self._lock:
+            self.config = self._collect_config_from_form()
+            self._persist_config()
+            self.trader = self._build_trader()
+        self.status_var.set("Configuração aplicada")
+        self._append_log(f"[{_now_text()}] configurações aplicadas e salvas", "info")
+        self._show_toast("Configurações salvas com sucesso", kind="success")
+        self._refresh_all()
+
+    def _apply_ai_config(self) -> None:
+        """Apply only the AI configuration (enabled, model, api_key) and rebuild trader."""
+        api_key = self.ai_api_key_var.get().strip()
+        model = self.ai_model_var.get().strip()
+        enabled = bool(self.ai_enabled_var.get())
+        if enabled and not api_key:
+            messagebox.showwarning("IA", "Informe a API Key para habilitar a IA.\n\nGroq: obtenha em console.groq.com\nHuggingFace: obtenha em huggingface.co/settings/tokens")
+            return
+        if enabled and not model:
+            messagebox.showwarning("IA", "Selecione ou digite um modelo.\n\nExemplos Groq: llama-3.3-70b-versatile\nExemplos HF: Qwen/Qwen2.5-7B-Instruct")
+            return
+        # Detect provider from key prefix
+        provider = "groq" if api_key.startswith("gsk_") else "huggingface"
+        # Persist to environment so the advisor picks up immediately
+        os.environ["HF_API_KEY"] = api_key
+        os.environ["HF_MODEL"] = model
+        with self._lock:
+            self.config.setdefault("ai", {}).update({
+                "enabled": enabled,
+                "hf_model": model,
+                "hf_api_key": api_key,
+                "timeout_seconds": int(self.config.get("ai", {}).get("timeout_seconds", 12)),
+            })
+            self._persist_config()
+            self.trader = self._build_trader()
+        status = "habilitada" if enabled else "desabilitada"
+        provider_label = "Groq" if provider == "groq" else "HuggingFace"
+        self.chat_status_var.set(f"IA {status} ({provider_label}:{model})")
+        self._append_log(f"[{_now_text()}] IA configurada: provider={provider_label} model={model} enabled={enabled}", "info")
+        self._show_toast(f"IA {status} via {provider_label}", kind="success")
+
+    def _update_market_data(self) -> None:
+        with self._lock:
+            trader = self.trader
+        if not trader.broker.connect():
+            self.connection_var.set("Desconectado")
+            self.status_var.set("Falha na conexão MT5")
+            return
+
+        symbol = self.symbol_var.get().strip() or "XAUUSD"
+        if not trader.broker.ensure_symbol(symbol):
+            self.connection_var.set("Símbolo indisponível")
+            return
+
+        try:
+            import MetaTrader5 as mt5  # type: ignore
+
+            tick = mt5.symbol_info_tick(symbol)
+        except Exception:
+            tick = None
+
+        if tick is not None:
+            price = float(tick.ask if self.side_var.get().lower() == "buy" else tick.bid)
+            self.current_price_var.set(f"{price:.2f}")
+            spread = trader.broker.current_spread_points(symbol)
+            self.spread_var.set(f"{spread:.1f} pts")
+        else:
+            self.current_price_var.set("-")
+            self.spread_var.set("-")
+
+    def _update_performance(self) -> None:
+        with self._lock:
+            trader = self.trader
+
+        symbol = self.symbol_var.get().strip() or "XAUUSD"
+        if not trader.broker.connect():
+            self.connection_var.set("Desconectado")
+            return
+
+        account = trader.broker.account_info()
+        balance = float(account.get("balance") or 0.0)
+        equity = float(account.get("equity") or balance)
+        free_margin = float(account.get("margin_free") or account.get("free_margin") or 0.0)
+        margin_level = float(account.get("margin_level") or 0.0)
+        positions = trader.engine.list_positions(symbol)
+        open_pnl = sum(float(pos.profit) for pos in positions)
+        daily_pnl = trader.risk.daily_pnl_from_equity(equity)
+        spread = trader.broker.current_spread_points(symbol)
+
+        self.metric_vars["balance"].set(f"{balance:,.2f}")
+        self.metric_vars["equity"].set(f"{equity:,.2f}")
+        self.metric_vars["free_margin"].set(f"{free_margin:,.2f}")
+        self.metric_vars["daily_pnl"].set(f"{daily_pnl:,.2f}")
+        self.metric_vars["open_pnl"].set(f"{open_pnl:,.2f}")
+        self.metric_vars["open_positions"].set(str(len(positions)))
+
+        self.account_balance_var.set(f"{balance:,.2f}")
+        self.account_equity_var.set(f"{equity:,.2f}")
+        self.account_free_margin_var.set(f"{free_margin:,.2f}")
+        self.account_margin_level_var.set(f"{margin_level:.1f}%")
+        self.daily_pnl_var.set(f"{daily_pnl:,.2f}")
+        self.open_pnl_var.set(f"{open_pnl:,.2f}")
+        self.open_positions_var.set(str(len(positions)))
+        self.trades_today_var.set(str(trader.risk.state.trades_today))
+        self.session_status_var.set("Ativa" if trader.risk.session_allowed() else "Fora da janela")
+        self.lock_status_var.set("Bloqueado" if trader.risk.state.locked else "Liberado")
+        self.mode_status_var.set("Live" if not trader.paper_mode else "Paper")
+        self.connection_var.set(f"Conectado | spread={spread:.1f} pts")
+
+        self.performance_vars["day_pnl"].set(f"{daily_pnl:,.2f}")
+        self.performance_vars["open_pnl"].set(f"{open_pnl:,.2f}")
+        self.performance_vars["trades_today"].set(str(trader.risk.state.trades_today))
+        self.performance_vars["consecutive_losses"].set(str(trader.risk.state.consecutive_losses))
+        self.performance_vars["daily_limit"].set(f"{float(trader.config['risk'].get('daily_loss_limit', 0.02)) * 100:.2f}%")
+        self.performance_vars["risk_trade"].set(f"{float(trader.config['risk'].get('risk_per_trade', 0.005)) * 100:.2f}%")
+
+        self._refresh_positions_list(positions)
+        self._update_manual_preview()
+
+    def _refresh_positions_list(self, positions: list[Any]) -> None:
+        for child in self.positions_scroll.inner.winfo_children():
+            child.destroy()
+
+        if not positions:
+            ttk.Label(self.positions_scroll.inner, text="Nenhuma posição aberta.", style="Subtitle.TLabel").pack(anchor="w", pady=8)
+            return
+
+        for position in positions:
+            card = ttk.Frame(self.positions_scroll.inner, style="Card.TFrame", padding=14)
+            card.pack(fill="x", pady=8)
+            top = ttk.Frame(card, style="Card.TFrame")
+            top.pack(fill="x")
+            ttk.Label(top, text=f"Ticket {position.ticket} | {position.symbol} | {position.side.upper()} | {position.volume:.2f} lot", style="Section.TLabel").pack(side="left")
+            ttk.Label(top, text=f"PnL {position.profit:,.2f}", style="Dark.TLabel").pack(side="right")
+
+            details = ttk.Frame(card, style="Card.TFrame")
+            details.pack(fill="x", pady=(8, 0))
+            fields = [
+                ("Entrada", f"{position.price_open:.2f}"),
+                ("Preço atual", f"{position.current_price:.2f}"),
+                ("SL", f"{position.stop_loss:.2f}"),
+                ("TP", f"{position.take_profit:.2f}"),
+                ("Magic", str(position.magic)),
+                ("Comentário", position.comment or "-"),
+            ]
+            for idx, (label, value) in enumerate(fields):
+                box = ttk.Frame(details, style="Card.TFrame")
+                box.grid(row=0, column=idx, padx=6, sticky="nsew")
+                details.columnconfigure(idx, weight=1)
+                ttk.Label(box, text=label, style="MetricTitle.TLabel").pack(anchor="w")
+                ttk.Label(box, text=value, style="Dark.TLabel").pack(anchor="w")
+
+            actions = ttk.Frame(card, style="Card.TFrame")
+            actions.pack(fill="x", pady=(10, 0))
+            ttk.Button(actions, text="Fechar", command=lambda p=position: self._close_position(p, p.volume), style="Danger.TButton").pack(side="left", padx=(0, 8))
+            ttk.Button(actions, text="Fechar 50%", command=lambda p=position: self._partial_close_position(p), style="Info.TButton").pack(side="left", padx=(0, 8))
+
+    def _update_manual_preview(self) -> None:
+        symbol = self.symbol_var.get().strip() or "XAUUSD"
+        price = _to_float(self.current_price_var.get(), 0.0)
+        volume = _to_float(self.manual_volume_var.get(), 0.0)
+        side = self.side_var.get().lower()
+        sl, tp = self._compute_manual_geometry(symbol, side, price)
+        self.manual_auto_sl_var.set(f"{sl:.2f}" if sl > 0 else "-")
+        self.manual_auto_tp_var.set(f"{tp:.2f}" if tp > 0 else "-")
+        if price <= 0 or sl <= 0:
+            self.manual_lot_preview_var.set("Lote sugerido: -")
+            return
+        with self._lock:
+            trader = self.trader
+        info = trader.broker.symbol_info(symbol)
+        equity = float(trader.broker.account_info().get("equity") or trader.broker.account_info().get("balance") or 0.0)
+        lots = trader.risk.calculate_lots(
+            equity=equity,
+            entry_price=price,
+            stop_loss=sl,
+            symbol_info=info,
+            manual_lots=volume if volume > 0 else None,
+        )
+        self.manual_lot_preview_var.set(f"Lote sugerido: {lots:.2f}")
+
+    def _refresh_all(self) -> None:
+        self._update_market_data()
+        self._update_performance()
+        self._update_session_snapshot()
+
+    def _update_session_snapshot(self) -> None:
+        with self._lock:
+            trader = self.trader
+        self.session_status_var.set("Ativa" if trader.risk.session_allowed() else "Fora da janela")
+        self.lock_status_var.set("Bloqueado" if trader.risk.state.locked else "Liberado")
+        self.mode_status_var.set("Live" if not trader.paper_mode else "Paper")
+
+    def _compute_manual_geometry(self, symbol: str, side: str, price: float) -> tuple[float, float]:
+        if price <= 0:
+            return 0.0, 0.0
+        with self._lock:
+            trader = self.trader
+        trader.broker.ensure_symbol(symbol)
+        info = trader.broker.symbol_info(symbol)
+        point = float(info.get("point") or 0.01)
+        digits = int(info.get("digits") or 2)
+        spread_points = trader.broker.current_spread_points(symbol)
+        rates = trader.broker.get_rates(symbol, "M5", 150)
+        atr = 0.0
+        if not rates.empty:
+            try:
+                enriched = add_features(rates)
+                atr = float(enriched.iloc[-1].get("atr_14", 0.0) or 0.0)
+            except Exception:
+                atr = 0.0
+        base_distance = max(atr * 0.75, spread_points * point * 2.0, point * 50)
+        if base_distance <= 0:
+            base_distance = max(price * 0.0005, point * 50)
+        if side == "buy":
+            return round(price - base_distance, digits), round(price + base_distance, digits)
+        return round(price + base_distance, digits), round(price - base_distance, digits)
+
+    def _manual_trade(self, side: str) -> None:
+        try:
+            with self._lock:
+                trader = self.trader
+            symbol = self.symbol_var.get().strip() or "XAUUSD"
+            if not trader.broker.connect():
+                messagebox.showerror("MT5", "Não foi possível conectar ao terminal MT5.")
+                return
+            trader.broker.ensure_symbol(symbol)
+            price = self._get_live_price(symbol, side)
+            if price <= 0:
+                messagebox.showerror("Preço", "Não foi possível obter o preço atual do símbolo.")
+                return
+            sl, tp = self._compute_manual_geometry(symbol, side, price)
+            if sl <= 0 or tp <= 0:
+                messagebox.showwarning("SL/TP", "Não foi possível calcular SL/TP automaticamente.")
+                return
+            # Apply manual overrides if provided
+            sl_override = _to_float(self.manual_sl_override_var.get(), 0.0)
+            tp_override = _to_float(self.manual_tp_override_var.get(), 0.0)
+            if sl_override > 0:
+                sl = sl_override
+            if tp_override > 0:
+                tp = tp_override
+            volume = _to_float(self.manual_volume_var.get(), 0.0)
+            idea = TradeIdea(
+                symbol=symbol,
+                side=side,
+                entry_mode="market",
+                entry_price=price,
+                stop_loss=sl,
+                take_profit=tp,
+                lots=volume,
+                confidence=0.95,
+                regime="manual",
+                reason=f"manual {side}",
+                partial_take_profit=None,
+                trailing_start_r=None,
+                max_hold_bars=0,
+            )
+            equity = float(trader.broker.account_info().get("equity") or trader.broker.account_info().get("balance") or 0.0)
+            spread = trader.broker.current_spread_points(symbol)
+            decision, order = trader.engine.place_trade(idea, equity=equity, spread_points=spread)
+            result = {"decision": decision.reason, "success": bool(order and order.success), "order": order.raw if order else None, "manual": True}
+            self.last_result_var.set("Última ação: sucesso" if result["success"] else "Última ação: falha")
+            self._append_log(
+                f"[{_now_text()}] manual {side.upper()} | approved={decision.approved} | lot={decision.lots:.2f} | SL={sl:.2f} | TP={tp:.2f} | result={result['success']} | retcode={(result.get('order') or {}).get('retcode')}",
+                "info" if result["success"] else "warn",
+            )
+            if not result["success"]:
+                messagebox.showwarning("Ordem manual", f"A ordem foi recusada: {result.get('order')}")
+            else:
+                self._show_toast(f"Ordem manual {side.upper()} enviada", kind="success")
+                self._refresh_all()
+        except Exception as exc:
+            messagebox.showerror("Erro", str(exc))
+
+    def _get_live_price(self, symbol: str, side: str) -> float:
+        with self._lock:
+            trader = self.trader
+        try:
+            trader.broker.ensure_symbol(symbol)
+            import MetaTrader5 as mt5  # type: ignore
+
+            tick = mt5.symbol_info_tick(symbol)
+            if not tick:
+                return 0.0
+            return float(tick.ask if side.lower() == "buy" else tick.bid)
+        except Exception:
+            return 0.0
+
+    def _close_position(self, position: Any, volume: float) -> None:
+        with self._lock:
+            trader = self.trader
+        result = trader.engine.close_single_position(ticket=position.ticket, symbol=position.symbol, side=position.side, volume=volume)
+        self.last_result_var.set("Última ação: sucesso" if result.get("success") else "Última ação: falha")
+        self._append_log(f"[{_now_text()}] fechar ticket={position.ticket} | result={result}", "info" if result.get("success") else "warn")
+        if result.get("success"):
+            self._show_toast(f"Ticket {position.ticket} fechado", kind="success")
+        self._refresh_all()
+
+    def _partial_close_position(self, position: Any) -> None:
+        with self._lock:
+            trader = self.trader
+        result = trader.engine.partial_close_position(ticket=position.ticket, symbol=position.symbol, side=position.side, volume=position.volume, ratio=0.5)
+        self.last_result_var.set("Última ação: sucesso" if result.get("success") else "Última ação: falha")
+        self._append_log(f"[{_now_text()}] parcial 50% ticket={position.ticket} | result={result}", "info" if result.get("success") else "warn")
+        if result.get("success"):
+            self._show_toast(f"Ticket {position.ticket} fechado 50%", kind="success")
+        self._refresh_all()
+
+    def _close_all_positions(self) -> None:
+        if not messagebox.askyesno("Fechar todas", "Deseja fechar todas as posições abertas agora?"):
+            return
+        with self._lock:
+            trader = self.trader
+        results = trader.engine.close_all_positions(self.symbol_var.get().strip() or None)
+        self._append_log(f"[{_now_text()}] fechar todas | results={results}", "info")
+        self._show_toast("Fechamento de todas as posições enviado", kind="info")
+        self._refresh_all()
+
+    def _start_auto(self) -> None:
+        if self._auto_running:
+            return
+        self._auto_running = True
+        self.status_var.set("Automação iniciada")
+        self._append_log(f"[{_now_text()}] automação iniciada", "info")
+        self._auto_thread = threading.Thread(target=self._auto_loop, daemon=True)
+        self._auto_thread.start()
+
+    def _stop_auto(self) -> None:
+        self._auto_running = False
+        self.status_var.set("Automação parada")
+        self._append_log(f"[{_now_text()}] automação parada", "warn")
+
+    def _auto_loop(self) -> None:
+        while self._auto_running:
+            try:
+                with self._lock:
+                    trader = self.trader
+                result = trader.run_once()
+                self._status_queue.put(str(result))
+            except Exception as exc:
+                self._status_queue.put(f"erro: {exc}")
+                self._event_queue.put(NotificationEvent(title="Erro", message=str(exc), priority=0, kind="error"))
+            time.sleep(max(5, int(self.cycle_var.get() or 30)))
+
+    def _preset_chat_question(self, question: str) -> None:
+        self.chat_question_var.set(question)
+        self._send_chat_question()
+
+    def _send_chat_question(self) -> None:
+        question = self.chat_question_var.get().strip()
+        if not question:
+            return
+        self.chat_question_var.set("")
+        self._append_chat("user", question)
+        self.chat_status_var.set("Consultando IA...")
+        threading.Thread(target=self._send_chat_worker, args=(question,), daemon=True).start()
+        try:
+            self.chat_input.focus_set()
+        except Exception:
+            pass
+
+    def _send_chat_worker(self, question: str) -> None:
+        try:
+            with self._lock:
+                trader = self.trader
+            response = trader.ai.chat(question, context=self._build_ai_context(), history=self.chat_history)
+            answer = str(response.get("answer") or "").strip() or "A IA não retornou resposta."
+            self.chat_history.append(("user", question))
+            self.chat_history.append(("assistant", answer))
+            backend = str(response.get("backend") or "unknown")
+            self._event_queue.put(NotificationEvent(title="Chat IA", message=answer[:240], priority=1, kind="info"))
+            self.root.after(0, lambda: self._append_chat("assistant", answer))
+            self.root.after(0, lambda: self.chat_status_var.set(f"IA pronta ({backend})"))
+            self.root.after(0, lambda: self._show_toast("Resposta recebida da IA", kind="success"))
+        except Exception as exc:
+            self.root.after(0, lambda: self.chat_status_var.set("Erro na IA"))
+            self.root.after(0, lambda: self._append_chat("assistant", f"Falha ao consultar a IA: {exc}"))
+            self.root.after(0, lambda: self._show_toast("Falha ao consultar a IA", kind="error"))
+
+    def _build_ai_context(self) -> str:
+        with self._lock:
+            trader = self.trader
+        symbol = self.symbol_var.get().strip() or "XAUUSD"
+        positions = trader.engine.list_positions(symbol)
+        return "\n".join(
+            [
+                f"Símbolo: {symbol}",
+                f"Modo: {'Paper' if trader.paper_mode else 'Live'}",
+                f"Preço atual: {self.current_price_var.get()}",
+                f"Spread: {self.spread_var.get()}",
+                f"PnL do dia: {self.daily_pnl_var.get()}",
+                f"Posições abertas: {len(positions)}",
+                f"Sessão: {self.session_status_var.get()}",
+                f"Bloqueio: {self.lock_status_var.get()}",
+                f"Último resultado: {self.last_result_var.get()}",
+            ]
+        )
+
+    def _poll_queues(self) -> None:
+        try:
+            while True:
+                event = self._event_queue.get_nowait()
+                tag = "info"
+                if event.kind == "warn":
+                    tag = "warn"
+                elif event.kind == "error":
+                    tag = "error"
+                self._append_log(f"[{event.created_at or _now_text()}] {event.kind.upper()} {event.title} | {event.message}", tag)
+                self.last_result_var.set(f"Último evento: {event.title}")
+        except queue.Empty:
+            pass
+
+        try:
+            while True:
+                status = self._status_queue.get_nowait()
+                self.last_result_var.set(status[:160])
+        except queue.Empty:
+            pass
+
+        self.root.after(250, self._poll_queues)
+
+    def _show_toast(self, message: str, *, kind: str = "info", duration_ms: int = 2500) -> None:
+        colors = {
+            "info": ("#0f766e", "#e5f9f5"),
+            "success": ("#15803d", "#ecfdf5"),
+            "warn": ("#b45309", "#fffbeb"),
+            "error": ("#b91c1c", "#fef2f2"),
+        }
+        bg, fg = colors.get(kind, colors["info"])
+        self.toast_var.set(message)
+        try:
+            self.toast_label.configure(background=bg, foreground=fg)
+        except Exception:
+            pass
+        if self.toast_window is not None:
+            try:
+                self.toast_window.destroy()
+            except Exception:
+                pass
+        self.toast_window = tk.Toplevel(self.root)
+        self.toast_window.overrideredirect(True)
+        self.toast_window.attributes("-topmost", True)
+        self.toast_window.configure(bg=bg)
+        label = tk.Label(self.toast_window, text=message, bg=bg, fg=fg, padx=16, pady=10, font=("Segoe UI", 10, "bold"))
+        label.pack()
+        self.root.update_idletasks()
+        x = self.root.winfo_rootx() + self.root.winfo_width() - 360
+        y = self.root.winfo_rooty() + 20
+        self.toast_window.geometry(f"320x48+{max(20, x)}+{max(20, y)}")
+        self.root.after(duration_ms, self._hide_toast)
+
+    def _hide_toast(self) -> None:
+        if self.toast_window is not None:
+            try:
+                self.toast_window.destroy()
+            except Exception:
+                pass
+            self.toast_window = None
+        self.toast_var.set("")
+
+    def _tick(self) -> None:
+        try:
+            self._refresh_all()
+        finally:
+            self.root.after(1000, self._tick)
+
+    def _on_close(self) -> None:
+        self._auto_running = False
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+
+    def run(self) -> None:
+        self.root.mainloop()
+
+
+def launch_gui(config_path: Path) -> None:
+    panel = XAUUSDControlPanel(config_path)
+    panel.run()
+</file>
+
+<file path="configs/default.yaml">
+app:
+  symbol: XAUUSD
+  timeframes:
+  - M1
+  - M5
+  - M15
+  mode: live
+  cycle_seconds: 30
+  position_state_path: runtime/position_state.json
+broker:
+  terminal_path: C:\Program Files\MetaTrader 5\terminal64.exe
+  login: 1513256820
+  password: 4$Kr4!$!!6cA
+  server: FTMO-Demo
+  deviation: 20
+  magic: 2401001
+risk:
+  risk_per_trade: 0.005
+  daily_loss_limit: 0.02
+  max_consecutive_losses: 3
+  max_trades_per_day: 5
+  max_open_positions: 1
+  max_spread_points: 80.0
+  breakeven_trigger_r: 0.9
+  partial_take_profit_r: 1.0
+  final_take_profit_r: 2.0
+  partial_close_ratio: 0.5
+  trailing_start_r: 1.2
+  trailing_atr_mult: 1.2
+  trailing_step_points: 10.0
+  min_rr: 1.2
+  session_start: 00:00
+  session_end: '23:30'
+strategy:
+  atr_period: 14
+  ema_fast: 20
+  ema_slow: 50
+  rsi_period: 14
+  adx_period: 14
+  breakout_lookback: 20
+  range_lookback: 30
+  confirmation_bars: 2
+  max_hold_bars: 20
+ai:
+  enabled: true
+  hf_model: llama-3.1-8b-instant
+  timeout_seconds: 12
+  hf_api_key: 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
+notifications:
+  enabled: true
+  queue_file: xauusd_push_queue.txt
+  min_priority: 1
+</file>
+
 <file path="src/xauusd_ia_trader/trader.py">
 from __future__ import annotations
 
@@ -3965,6 +4292,7 @@ class XAUUSDAutonomousTrader:
             enabled=bool(self.config["ai"].get("enabled", False)),
             model=self.config["ai"].get("hf_model", ""),
             timeout_seconds=int(self.config["ai"].get("timeout_seconds", 12)),
+            api_key=self.config["ai"].get("hf_api_key", ""),
         )
         self.engine = ExecutionEngine(
             broker=self.broker,
