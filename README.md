@@ -48,9 +48,10 @@ python -m xauusd_ia_trader.cli --config configs/default.yaml --gui
 The dashboard includes:
 
 - live performance cards for balance, equity, open PnL and daily PnL
-- manual buy/sell buttons with current price, SL, TP and lot control
+- manual buy/sell buttons with current price and automatic SL/TP at 1:1 RR
 - a live positions panel with close, partial close and close-all actions
 - editable mode, risk, session and broker fields
+- an AI chat tab for questions about the current strategy and operational context
 - real-time logs and MT5 push event feed
 
 To force a demo test trade from the terminal:

@@ -1,25 +1,26 @@
 app:
   symbol: XAUUSD
-  timeframes: ["M1", "M5", "M15"]
+  timeframes:
+  - M1
+  - M5
+  - M15
   mode: live
   cycle_seconds: 30
-  position_state_path: "runtime/position_state.json"
-
+  position_state_path: runtime/position_state.json
 broker:
-  terminal_path: ""
-  login: 0
-  password: ""
-  server: ""
+  terminal_path: C:\Program Files\MetaTrader 5\terminal64.exe
+  login: 1513256820
+  password: 4$Kr4!$!!6cA
+  server: FTMO-Demo
   deviation: 20
   magic: 2401001
-
 risk:
   risk_per_trade: 0.005
   daily_loss_limit: 0.02
   max_consecutive_losses: 3
   max_trades_per_day: 5
   max_open_positions: 1
-  max_spread_points: 80
+  max_spread_points: 80.0
   breakeven_trigger_r: 0.9
   partial_take_profit_r: 1.0
   final_take_profit_r: 2.0
@@ -28,9 +29,8 @@ risk:
   trailing_atr_mult: 1.2
   trailing_step_points: 10.0
   min_rr: 1.2
-  session_start: "07:00"
-  session_end: "20:30"
-
+  session_start: 07:00
+  session_end: '20:30'
 strategy:
   atr_period: 14
   ema_fast: 20
@@ -41,13 +41,11 @@ strategy:
   range_lookback: 30
   confirmation_bars: 2
   max_hold_bars: 20
-
 ai:
   enabled: false
-  hf_model: ""
+  hf_model: llama-3.3-70b-versatile
   timeout_seconds: 12
-
 notifications:
   enabled: true
-  queue_file: "xauusd_push_queue.txt"
+  queue_file: xauusd_push_queue.txt
   min_priority: 1
