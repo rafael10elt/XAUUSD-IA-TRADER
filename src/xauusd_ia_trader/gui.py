@@ -68,6 +68,8 @@ class XAUUSDControlPanel:
         self._event_queue: queue.Queue[NotificationEvent] = queue.Queue()
         self._status_queue: queue.Queue[str] = queue.Queue()
         self.chat_history: list[tuple[str, str]] = []
+        self.toast_var = tk.StringVar(value="")
+        self.toast_window: tk.Toplevel | None = None
 
         self._build_style()
         self._build_vars()
@@ -228,6 +230,8 @@ class XAUUSDControlPanel:
         ]:
             ttk.Button(toolbar, text=label, command=command, style=style_name).pack(side="left", padx=(0, 10))
         ttk.Label(toolbar, textvariable=self.status_var, style="Section.TLabel").pack(side="right")
+        self.toast_label = ttk.Label(outer, textvariable=self.toast_var, style="Subtitle.TLabel")
+        self.toast_label.pack(fill="x", pady=(0, 8))
 
         metrics = ttk.Frame(outer, style="App.TFrame")
         metrics.pack(fill="x", pady=(0, 14))
@@ -525,6 +529,7 @@ class XAUUSDControlPanel:
         entry.bind("<KP_Enter>", lambda _event: self._send_chat_question())
         ttk.Button(input_row, text="Enviar", command=self._send_chat_question, style="Accent.TButton").pack(side="left")
         self.chat_input = entry
+        ttk.Button(input_row, text="Limpar conversa", command=self._clear_chat, style="Info.TButton").pack(side="left", padx=(8, 0))
 
         for label, question in [
             ("Resumo do robô", "Explique o estado atual do robô e os principais riscos."),
@@ -597,6 +602,15 @@ class XAUUSDControlPanel:
         self.chat_text.insert("end", f"{prefix}: {text}\n\n")
         self.chat_text.see("end")
         self.chat_text.configure(state="disabled")
+
+    def _clear_chat(self) -> None:
+        self.chat_history.clear()
+        self.chat_text.configure(state="normal")
+        self.chat_text.delete("1.0", "end")
+        self.chat_text.configure(state="disabled")
+        self.chat_question_var.set("")
+        self.chat_status_var.set("IA pronta")
+        self._show_toast("Conversa limpa", kind="info")
 
     def _clear_logs(self) -> None:
         self.log_text.configure(state="normal")
@@ -727,6 +741,7 @@ class XAUUSDControlPanel:
             self.trader = self._build_trader()
         self.status_var.set("Configuração aplicada")
         self._append_log(f"[{_now_text()}] configurações aplicadas e salvas", "info")
+        self._show_toast("Configurações salvas com sucesso", kind="success")
         self._refresh_all()
 
     def _update_market_data(self) -> None:
@@ -951,6 +966,7 @@ class XAUUSDControlPanel:
             if not result["success"]:
                 messagebox.showwarning("Ordem manual", f"A ordem foi recusada: {result.get('order')}")
             else:
+                self._show_toast(f"Ordem manual {side.upper()} enviada", kind="success")
                 self._refresh_all()
         except Exception as exc:
             messagebox.showerror("Erro", str(exc))
@@ -975,6 +991,8 @@ class XAUUSDControlPanel:
         result = trader.engine.close_single_position(ticket=position.ticket, symbol=position.symbol, side=position.side, volume=volume)
         self.last_result_var.set("Última ação: sucesso" if result.get("success") else "Última ação: falha")
         self._append_log(f"[{_now_text()}] fechar ticket={position.ticket} | result={result}", "info" if result.get("success") else "warn")
+        if result.get("success"):
+            self._show_toast(f"Ticket {position.ticket} fechado", kind="success")
         self._refresh_all()
 
     def _partial_close_position(self, position: Any) -> None:
@@ -983,6 +1001,8 @@ class XAUUSDControlPanel:
         result = trader.engine.partial_close_position(ticket=position.ticket, symbol=position.symbol, side=position.side, volume=position.volume, ratio=0.5)
         self.last_result_var.set("Última ação: sucesso" if result.get("success") else "Última ação: falha")
         self._append_log(f"[{_now_text()}] parcial 50% ticket={position.ticket} | result={result}", "info" if result.get("success") else "warn")
+        if result.get("success"):
+            self._show_toast(f"Ticket {position.ticket} fechado 50%", kind="success")
         self._refresh_all()
 
     def _close_all_positions(self) -> None:
@@ -992,6 +1012,7 @@ class XAUUSDControlPanel:
             trader = self.trader
         results = trader.engine.close_all_positions(self.symbol_var.get().strip() or None)
         self._append_log(f"[{_now_text()}] fechar todas | results={results}", "info")
+        self._show_toast("Fechamento de todas as posições enviado", kind="info")
         self._refresh_all()
 
     def _start_auto(self) -> None:
@@ -1045,12 +1066,15 @@ class XAUUSDControlPanel:
             answer = str(response.get("answer") or "").strip() or "A IA não retornou resposta."
             self.chat_history.append(("user", question))
             self.chat_history.append(("assistant", answer))
+            backend = str(response.get("backend") or "unknown")
             self._event_queue.put(NotificationEvent(title="Chat IA", message=answer[:240], priority=1, kind="info"))
             self.root.after(0, lambda: self._append_chat("assistant", answer))
-            self.root.after(0, lambda: self.chat_status_var.set("IA pronta"))
+            self.root.after(0, lambda: self.chat_status_var.set(f"IA pronta ({backend})"))
+            self.root.after(0, lambda: self._show_toast("Resposta recebida da IA", kind="success"))
         except Exception as exc:
             self.root.after(0, lambda: self.chat_status_var.set("Erro na IA"))
             self.root.after(0, lambda: self._append_chat("assistant", f"Falha ao consultar a IA: {exc}"))
+            self.root.after(0, lambda: self._show_toast("Falha ao consultar a IA", kind="error"))
 
     def _build_ai_context(self) -> str:
         with self._lock:
@@ -1093,6 +1117,45 @@ class XAUUSDControlPanel:
             pass
 
         self.root.after(250, self._poll_queues)
+
+    def _show_toast(self, message: str, *, kind: str = "info", duration_ms: int = 2500) -> None:
+        colors = {
+            "info": ("#0f766e", "#e5f9f5"),
+            "success": ("#15803d", "#ecfdf5"),
+            "warn": ("#b45309", "#fffbeb"),
+            "error": ("#b91c1c", "#fef2f2"),
+        }
+        bg, fg = colors.get(kind, colors["info"])
+        self.toast_var.set(message)
+        try:
+            self.toast_label.configure(background=bg, foreground=fg)
+        except Exception:
+            pass
+        if self.toast_window is not None:
+            try:
+                self.toast_window.destroy()
+            except Exception:
+                pass
+        self.toast_window = tk.Toplevel(self.root)
+        self.toast_window.overrideredirect(True)
+        self.toast_window.attributes("-topmost", True)
+        self.toast_window.configure(bg=bg)
+        label = tk.Label(self.toast_window, text=message, bg=bg, fg=fg, padx=16, pady=10, font=("Segoe UI", 10, "bold"))
+        label.pack()
+        self.root.update_idletasks()
+        x = self.root.winfo_rootx() + self.root.winfo_width() - 360
+        y = self.root.winfo_rooty() + 20
+        self.toast_window.geometry(f"320x48+{max(20, x)}+{max(20, y)}")
+        self.root.after(duration_ms, self._hide_toast)
+
+    def _hide_toast(self) -> None:
+        if self.toast_window is not None:
+            try:
+                self.toast_window.destroy()
+            except Exception:
+                pass
+            self.toast_window = None
+        self.toast_var.set("")
 
     def _tick(self) -> None:
         try:

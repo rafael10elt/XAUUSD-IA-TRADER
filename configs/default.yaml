@@ -43,7 +43,7 @@ strategy:
   max_hold_bars: 20
 ai:
   enabled: true
-  hf_model: llama-3.3-70b-versatile
+  hf_model: Qwen/Qwen2.5-7B-Instruct-1M
   timeout_seconds: 12
 notifications:
   enabled: true
