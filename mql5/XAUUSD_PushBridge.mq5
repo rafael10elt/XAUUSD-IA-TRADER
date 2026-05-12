@@ -3,7 +3,7 @@
 input string QueueFileName = "xauusd_push_queue.txt";
 input int TimerSeconds = 2;
 
-long g_last_position = 0;
+ulong g_last_position = 0;
 
 int OnInit()
 {
@@ -23,11 +23,11 @@ void OnTimer()
    if(handle == INVALID_HANDLE)
       return;
 
-   int size = (int)FileSize(handle);
+   ulong size = (ulong)FileSize(handle);
    if(g_last_position > size)
       g_last_position = 0;
 
-   FileSeek(handle, g_last_position, SEEK_SET);
+   FileSeek(handle, (long)g_last_position, SEEK_SET);
 
    while(!FileIsEnding(handle))
    {
@@ -39,7 +39,6 @@ void OnTimer()
       }
    }
 
-   g_last_position = FileTell(handle);
+   g_last_position = (ulong)FileTell(handle);
    FileClose(handle);
 }
-

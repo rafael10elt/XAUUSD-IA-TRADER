@@ -34,6 +34,7 @@ This project is designed for prop-firm style constraints:
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+pip install -e .
 copy .env.example .env
 python -m xauusd_ia_trader.cli --config configs/default.yaml --once
 ```

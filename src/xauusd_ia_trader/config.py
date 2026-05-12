@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from dotenv import load_dotenv
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "app": {
@@ -91,6 +92,7 @@ def load_yaml_file(path: str | Path | None) -> dict[str, Any]:
 
 
 def load_config(path: str | Path | None = None) -> dict[str, Any]:
+    load_dotenv()
     config = deep_merge(DEFAULT_CONFIG, load_yaml_file(path))
 
     env_overrides = {
