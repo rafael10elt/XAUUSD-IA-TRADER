@@ -133,7 +133,33 @@ class XAUUSDAutonomousTrader:
             max_hold_bars=int(self.config["strategy"].get("max_hold_bars", 20)),
         )
 
-    def run_once(self) -> dict[str, Any]:
+    def _force_idea(self, *, side: str, price: float, symbol_info: dict[str, Any]) -> TradeIdea:
+        point = float(symbol_info.get("point") or 0.01)
+        digits = int(symbol_info.get("digits") or 2)
+        atr_buffer = max(price * 0.0006, point * 50)
+        if side == "buy":
+            stop = round(price - atr_buffer, digits)
+            take = round(price + atr_buffer * 1.5, digits)
+        else:
+            stop = round(price + atr_buffer, digits)
+            take = round(price - atr_buffer * 1.5, digits)
+        return TradeIdea(
+            symbol=self.symbol,
+            side=side,
+            entry_mode="market",
+            entry_price=round(price, digits),
+            stop_loss=stop,
+            take_profit=take,
+            lots=0.0,
+            confidence=0.1,
+            regime="force",
+            reason=f"forced {side}",
+            partial_take_profit=None,
+            trailing_start_r=None,
+            max_hold_bars=5,
+        )
+
+    def run_once(self, force_side: str | None = None) -> dict[str, Any]:
         if not self.broker.connect():
             self.notifier.error("MT5 connection failed", self.broker.last_error or "unknown error", symbol=self.symbol, priority=0)
             return {"success": False, "reason": self.broker.last_error}
@@ -198,6 +224,24 @@ class XAUUSDAutonomousTrader:
                 symbol=self.symbol,
                 priority=1,
             )
+
+        if force_side:
+            forced_idea = self._force_idea(side=force_side.lower(), price=live_price, symbol_info=symbol_info)
+            decision, order = self.engine.place_trade(forced_idea, equity=equity, spread_points=spread_points)
+            if order and order.raw:
+                self.notifier.info(
+                    "Forced trade result",
+                    f"{self.symbol} | success={order.success} | retcode={order.raw.get('retcode')} | attempts={order.raw.get('attempts')}",
+                    symbol=self.symbol,
+                    priority=1,
+                )
+            return {
+                "success": bool(order and order.success),
+                "forced": True,
+                "decision": decision.reason,
+                "order": order.raw if order else None,
+                "management": lifecycle_actions,
+            }
 
         idea = self._pick_idea(df, regime.regime, ai_hint, symbol_info)
         if idea is None:

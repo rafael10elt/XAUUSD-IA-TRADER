@@ -33,6 +33,17 @@ def _pick_filling_mode(info: dict[str, Any]) -> int | None:
     return getattr(mt5, "ORDER_FILLING_RETURN", None)
 
 
+def _candidate_filling_modes(info: dict[str, Any]) -> list[int | None]:
+    if mt5 is None:
+        return [None]
+    preferred = _pick_filling_mode(info)
+    candidates: list[int | None] = []
+    for candidate in [preferred, getattr(mt5, "ORDER_FILLING_FOK", None), getattr(mt5, "ORDER_FILLING_IOC", None), getattr(mt5, "ORDER_FILLING_RETURN", None), None]:
+        if candidate not in candidates:
+            candidates.append(candidate)
+    return candidates
+
+
 def _sanitize_comment(text: str, limit: int = 24) -> str:
     allowed = []
     for char in str(text):
@@ -163,6 +174,51 @@ class MT5Broker:
             request["check"] = check._asdict()
         return request
 
+    def _send_with_fallbacks(self, symbol: str, request: dict[str, Any]) -> dict[str, Any]:
+        if mt5 is None:
+            return {"success": False, "message": "MetaTrader5 not installed", "attempts": []}
+
+        info = self.symbol_info(symbol)
+        attempts: list[dict[str, Any]] = []
+        base_request = dict(request)
+        for filling_mode in _candidate_filling_modes(info):
+            trial = dict(base_request)
+            if filling_mode is not None:
+                trial["type_filling"] = filling_mode
+            else:
+                trial.pop("type_filling", None)
+
+            check = mt5.order_check(trial)
+            check_payload = check._asdict() if check is not None else None
+            attempts.append(
+                {
+                    "type_filling": filling_mode,
+                    "check_retcode": check_payload.get("retcode") if check_payload else None,
+                    "check_comment": check_payload.get("comment") if check_payload else None,
+                }
+            )
+
+            if check_payload and check_payload.get("retcode") not in {mt5.TRADE_RETCODE_DONE, 10009, 10008, 10025, 10030}:
+                # Still try order_send on some brokers, but keep the attempt log.
+                pass
+
+            result = mt5.order_send(trial)
+            if result is None:
+                attempts[-1]["send_error"] = str(mt5.last_error())
+                continue
+
+            payload = result._asdict()
+            payload["attempts"] = attempts
+            payload["request"] = trial
+            payload["success"] = payload.get("retcode") in {
+                mt5.TRADE_RETCODE_DONE,
+                getattr(mt5, "TRADE_RETCODE_DONE_PARTIAL", -1),
+                getattr(mt5, "TRADE_RETCODE_PLACED", -1),
+            }
+            return payload
+
+        return {"success": False, "message": "all filling modes rejected", "attempts": attempts, "request": base_request}
+
     def send_market_order(
         self,
         *,
@@ -201,18 +257,7 @@ class MT5Broker:
             "comment": _sanitize_comment(comment),
             "type_time": mt5.ORDER_TIME_GTC,
         }
-        request = self._prepare_trade_request(symbol, request)
-        result = mt5.order_send(request)
-        if result is None:
-            return {"success": False, "message": str(mt5.last_error()), "request": request}
-        payload = result._asdict()
-        payload["success"] = payload.get("retcode") in {
-            mt5.TRADE_RETCODE_DONE,
-            getattr(mt5, "TRADE_RETCODE_DONE_PARTIAL", -1),
-            getattr(mt5, "TRADE_RETCODE_PLACED", -1),
-        }
-        payload["request"] = request
-        return payload
+        return self._send_with_fallbacks(symbol, request)
 
     def modify_position(
         self,
@@ -235,14 +280,7 @@ class MT5Broker:
             "sl": sl,
             "tp": tp,
         }
-        request = self._prepare_trade_request(symbol, request)
-        result = mt5.order_send(request)
-        if result is None:
-            return {"success": False, "message": str(mt5.last_error()), "request": request}
-        payload = result._asdict()
-        payload["success"] = payload.get("retcode") == mt5.TRADE_RETCODE_DONE
-        payload["request"] = request
-        return payload
+        return self._send_with_fallbacks(symbol, request)
 
     def close_position(
         self,
@@ -327,14 +365,4 @@ class MT5Broker:
             "comment": _sanitize_comment(comment),
             "type_time": mt5.ORDER_TIME_GTC,
         }
-        request = self._prepare_trade_request(symbol, request)
-        result = mt5.order_send(request)
-        if result is None:
-            return {"success": False, "message": str(mt5.last_error()), "request": request}
-        payload = result._asdict()
-        payload["success"] = payload.get("retcode") in {
-            mt5.TRADE_RETCODE_DONE,
-            getattr(mt5, "TRADE_RETCODE_PLACED", -1),
-        }
-        payload["request"] = request
-        return payload
+        return self._send_with_fallbacks(symbol, request)
