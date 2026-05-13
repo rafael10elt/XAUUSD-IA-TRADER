@@ -67,41 +67,62 @@ class XAUUSDAutonomousTrader:
             side = "buy"
             entry_mode = "market"
             entry = price
-            stop = min(low_20, ema_fast, entry - min_stop_distance)
+            
+            # Ajuste de Scalping: Limite máximo do stop de 2x o ATR
+            max_sl_distance = max(atr * 2.0, min_stop_distance)
+            structural_stop = min(low_20, ema_fast)
+            stop = max(structural_stop, entry - max_sl_distance)
+            
             if stop >= entry:
                 stop = entry - min_stop_distance
             risk = max(entry - stop, min_stop_distance)
             tp = entry + risk * float(self.config["risk"].get("final_take_profit_r", 2.0))
             confidence = min(0.95, 0.65 + (adx / 100.0) + max((ema_fast - ema_slow) / max(price, 1.0), 0))
             reason = "trend continuation scalp"
+            
         elif regime == "trend_down":
             side = "sell"
             entry_mode = "market"
             entry = price
-            stop = max(high_20, ema_fast, entry + min_stop_distance)
+            
+            # Ajuste de Scalping: Limite máximo do stop de 2x o ATR
+            max_sl_distance = max(atr * 2.0, min_stop_distance)
+            structural_stop = max(high_20, ema_fast)
+            stop = min(structural_stop, entry + max_sl_distance)
+            
             if stop <= entry:
                 stop = entry + min_stop_distance
             risk = max(stop - entry, min_stop_distance)
             tp = entry - risk * float(self.config["risk"].get("final_take_profit_r", 2.0))
             confidence = min(0.95, 0.65 + (adx / 100.0) + max((ema_slow - ema_fast) / max(price, 1.0), 0))
             reason = "trend continuation scalp"
+            
         elif regime in {"range", "compression"}:
             if price <= low_20 + atr * 0.35 and rsi <= 45:
                 side = "buy"
                 entry_mode = "market"
                 entry = price
-                stop = min(low_20, entry - min_stop_distance)
+                
+                # Para Range o stop é mais curto ainda (1.5x ATR no máximo)
+                max_sl_distance = max(atr * 1.5, min_stop_distance)
+                stop = max(low_20, entry - max_sl_distance)
+                
                 if stop >= entry:
                     stop = entry - min_stop_distance
                 risk = max(entry - stop, min_stop_distance)
                 tp = entry + risk * 1.4
                 confidence = 0.66
                 reason = "range fade long"
+                
             elif price >= high_20 - atr * 0.35 and rsi >= 55:
                 side = "sell"
                 entry_mode = "market"
                 entry = price
-                stop = max(high_20, entry + min_stop_distance)
+                
+                # Para Range o stop é mais curto ainda (1.5x ATR no máximo)
+                max_sl_distance = max(atr * 1.5, min_stop_distance)
+                stop = min(high_20, entry + max_sl_distance)
+                
                 if stop <= entry:
                     stop = entry + min_stop_distance
                 risk = max(stop - entry, min_stop_distance)
@@ -179,11 +200,14 @@ class XAUUSDAutonomousTrader:
         for tf in self.config["app"].get("timeframes", ["M1", "M5", "M15"]):
             frames[tf] = self.broker.get_rates(self.symbol, tf, 300)
         df = pd.DataFrame()
+        
+        # Mantive a lógica original, priorizando a estabilidade do M5
         for candidate in ("M5", "M1", "M15"):
             frame = frames.get(candidate)
             if frame is not None and not frame.empty:
                 df = frame
                 break
+        
         if df.empty:
             self.notifier.warn("No market data", "could not load rates", symbol=self.symbol, priority=1)
             return {"success": False, "reason": "no data"}
